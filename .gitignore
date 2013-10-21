@@ -1,0 +1,8 @@
+# IDE files
+.idea/workspace.xml
+
+# Composer
+src/vendor
+
+# Build
+build

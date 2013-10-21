@@ -1,0 +1,10 @@
+{
+    "require": {
+        "ulrichsg/getopt-php": "dev-master"
+    },
+    "autoload": {
+        "psr-0": {
+            "AmericanReading": "lib/"
+        }
+    }
+}
