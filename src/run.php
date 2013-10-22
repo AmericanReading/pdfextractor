@@ -1,8 +1,10 @@
 <?php
 
-use AmericanReading\Ebook\App;
+use AmericanReading\PdfExtractor\App;
 
-require_once("phar://ebook.phar/vendor/autoload.php");
+define("PHAR_NAME", "pdfextractor.phar");
+
+require_once("phar://" . PHAR_NAME . "/vendor/autoload.php");
 
 $app = new App();
 $app->run();
