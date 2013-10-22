@@ -6,4 +6,5 @@ interface ConfigInterface
 {
     const PHAR_NAME = 'pdfextractor.phar';
     const CONFIGURATION_FILE_NAME = 'pdfextractor.json';
+    const IM_IDENTIFY = 'identify';
 }

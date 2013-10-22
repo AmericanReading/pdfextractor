@@ -4,7 +4,7 @@ namespace AmericanReading\Configuration;
 
 use stdClass;
 
-class Configuration
+class Configuration implements ReadableConfigurationInterface
 {
     /** @var Object containing the merged configuration data. */
     private $data;

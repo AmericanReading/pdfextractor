@@ -5,6 +5,8 @@ namespace AmericanReading\PdfExtractor;
 use AmericanReading\CliApp\CliApp;
 use AmericanReading\CliApp\CliAppException;
 use AmericanReading\Configuration\Configuration;
+use AmericanReading\Configuration\ReadableConfigurationInterface;
+use AmericanReading\PdfExtractor\Command\ImageMagickCommand;
 use Ulrichsg\Getopt;
 use UnexpectedValueException;
 
@@ -18,6 +20,16 @@ class App extends CliApp implements ConfigInterface
         $this->readConfiguration();
         $this->readOptions($options);
         $this->message("PDF Extractor\n", self::VERBOSITY_VERBOSE);
+        $this->readSourcePdf();
+
+    }
+
+    /**
+     * @return ReadableConfigurationInterface
+     */
+    public function getConfiguration()
+    {
+        return $this->conf;
     }
 
     private function readConfiguration()
@@ -44,10 +56,12 @@ class App extends CliApp implements ConfigInterface
     {
         // Build the options.
         $getopt = new Getopt(array(
-            array('b', 'insert-blank',  Getopt::OPTIONAL_ARGUMENT, "Insert blank pages at the given locations."),
-            array('c', 'configuration', Getopt::OPTIONAL_ARGUMENT, "JSON file of configuration options."),
-            array('h', 'help',          Getopt::NO_ARGUMENT,       "Show this help message."),
-            array('v', 'verbose',       Getopt::NO_ARGUMENT,       "Verbose mode.")
+            array('b',  'blank',   Getopt::REQUIRED_ARGUMENT, "Insert blank pages at the given locations."),
+            array('c',  'config',  Getopt::REQUIRED_ARGUMENT, "JSON file of configuration options."),
+            array(null, 'debug',   Getopt::NO_ARGUMENT,       "Show debugging information."),
+            array('h',  'help',    Getopt::NO_ARGUMENT,       "Show this help message."),
+            array('s',  'source',  Getopt::REQUIRED_ARGUMENT, "Path to the PDF to process."),
+            array('v',  'verbose', Getopt::NO_ARGUMENT,       "Verbose mode.")
         ));
 
         // Parse.
@@ -64,8 +78,8 @@ class App extends CliApp implements ConfigInterface
         }
 
         // Check if a configuration file was specified.
-        if ($getopt->getOption('configuration')) {
-            $configuration = $getopt->getOption('configuration');
+        if ($getopt->getOption('config')) {
+            $configuration = $getopt->getOption('config');
             if (file_exists(realpath($configuration))) {
                 $conf = file_get_contents(realpath($configuration));
                 $conf = Util::stripJsonComments($conf);
@@ -77,13 +91,47 @@ class App extends CliApp implements ConfigInterface
         }
 
         // Update the app configuration.
+
+        // Debug
+        if ($getopt->getOptions('debug') !== null) {
+            $this->conf->set('debug', $getopt->getOption('debug'));
+        }
+
+        // Verbose
         if ($getopt->getOptions('verbose') !== null) {
-            $this->conf->set('verbose', $getopt->getOptions('verbose'));
+            $this->conf->set('verbose', $getopt->getOption('verbose'));
+        }
+
+        // Source
+        if ($getopt->getOptions('source') !== null) {
+            $this->conf->set('source', $getopt->getOption('source'));
         }
 
         // Read the configuration.
+        $this->debugMode = $this->conf->get('debug', false);
+
         if ($this->conf->get('verbose', false)) {
             $this->verbosity = self::VERBOSITY_VERBOSE;
         }
+    }
+
+    private function readSourcePdf()
+    {
+        $source = $this->conf->get('source');
+        if ($source === null) {
+            throw new CliAppException("No source file provided. Please specify the path to a PDF with -s or --source.", 1);
+        }
+        if (!file_exists($source)) {
+            throw new CliAppException("Source file '$source' not found.'", 1);
+        }
+
+        $this->message("Reading $source...\n");
+
+        $cmd = new ImageMagickCommand(
+            self::IM_IDENTIFY,
+            '-format "%W %H\n" ' . $source,
+            $this->getConfiguration());
+        $cmd->run();
+        print_r($cmd->getResults());
     }
 }
