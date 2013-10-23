@@ -49,8 +49,7 @@ class MyApp extends App implements ConfigInterface
         $this->msg->write("PDF Extractor\n", self::VERBOSITY_VERBOSE);
         $this->readPdfInfo();
 
-        $this->msg->write($this->pdfInfo->getPageCount() . "\n", self::VERBOSITY_DEBUG);
-        $this->msg->write(print_r($this->pdfInfo->getPageSizes(), true), self::VERBOSITY_DEBUG);
+
     }
 
     protected function exitWithError($statusCode = 1, $message = null)
@@ -157,5 +156,19 @@ class MyApp extends App implements ConfigInterface
         $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
         $cmd->run();
         $this->pdfInfo = $cmd->getInfo();
+        $this->msg->write($this->pdfInfo->getPageCount() . "\n", self::VERBOSITY_DEBUG);
+        $this->msg->write(print_r($this->pdfInfo->getPageSizes(), true), self::VERBOSITY_DEBUG);
+        if ($this->pdfInfo->isUniform()) {
+            $this->msg->write("All pages are the same dimensions.\n");
+        } else {
+            $this->msg->write("Page sizes are not uniform.\n");
+        }
+        $this->msg->write("Smallest Page Size: " . $this->pdfInfo->getSmallestPageSize() . "\n");
+        $this->msg->write("Largest Page Size: " . $this->pdfInfo->getLargestPageSize() . "\n");
+        if ($this->pdfInfo->containsSpreads()) {
+            $this->msg->write("Spreads.\n");
+        } else {
+            $this->msg->write("No spreads.\n");
+        }
     }
 }

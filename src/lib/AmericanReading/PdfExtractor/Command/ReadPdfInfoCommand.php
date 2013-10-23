@@ -11,7 +11,7 @@ class ReadPdfInfoCommand extends ImageMagickCommand
 
     public function __construct($pdf, ReadableConfigurationInterface $conf)
     {
-        $args = '-format "%W %H\n" ' . $pdf . ' 2> /dev/null';
+        $args = '-define pdf:use-trimbox=true -format "%W %H\n" ' . $pdf . ' 2> /dev/null';
         parent::__construct(self::IM_IDENTIFY, $args, $conf);
     }
 
