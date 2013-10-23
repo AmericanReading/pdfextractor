@@ -2,6 +2,9 @@
 
 namespace AmericanReading\CliTools\Command;
 
+/**
+ * Class for building and running commands throw exec().
+ */
 class Command implements CommandInterface
 {
     /** @var string Path to the command to execute */
@@ -21,30 +24,29 @@ class Command implements CommandInterface
      */
     public function __construct($command, $arguments='')
     {
-        $this->command = $command;
-        $this->arguments = $arguments;
+        $this->setCommand($command);
+        $this->setArguments($arguments);
     }
 
     /**
-     * Execute the command. This will set commandLine, results, and statusCode.
+     * Execute the command. This will set results, and statusCode.
      */
     public function run()
     {
-        $cmd = $this->getCommand() . ' ' . $this->getArguments();
-        $this->commandLine = $cmd;
-        exec($this->commandLine, $this->results, $this->statusCode);
+        exec($this->getCommandLine(), $this->results, $this->statusCode);
     }
 
     /**
-     * @param mixed $arguments
+     * @param string $arguments
      */
     public function setArguments($arguments)
     {
+        unset($this->commandLine);
         $this->arguments = $arguments;
     }
 
     /**
-     * @return mixed
+     * @return string
      */
     public function getArguments()
     {
@@ -52,15 +54,16 @@ class Command implements CommandInterface
     }
 
     /**
-     * @param mixed $command
+     * @param string $command
      */
     public function setCommand($command)
     {
+        unset($this->commandLine);
         $this->command = $command;
     }
 
     /**
-     * @return mixed
+     * @return string
      */
     public function getCommand()
     {
@@ -72,6 +75,9 @@ class Command implements CommandInterface
      */
     public function getCommandLine()
     {
+        if (!isset($this->commandLine)) {
+            $this->commandLine = $this->buildCommandLine();
+        }
         return $this->commandLine;
     }
 
@@ -89,5 +95,13 @@ class Command implements CommandInterface
     public function getStatusCode()
     {
         return $this->statusCode;
+    }
+
+    /**
+     * @return string The full command line to run using exec()
+     */
+    protected function buildCommandLine()
+    {
+        return $this->getCommand() . ' ' . $this->getArguments();
     }
 }

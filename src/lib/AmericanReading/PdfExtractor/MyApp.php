@@ -4,10 +4,11 @@ namespace AmericanReading\PdfExtractor;
 
 use AmericanReading\CliTools\App\App;
 use AmericanReading\CliTools\App\AppException;
-use AmericanReading\CliTools\Command\Command;
+use AmericanReading\CliTools\Configuration\Configuration;
 use AmericanReading\CliTools\Message\Messager;
 use AmericanReading\CliTools\Message\MessagerInterface;
-use AmericanReading\CliTools\Configuration\Configuration;
+use AmericanReading\PdfExtractor\Command\ReadPdfInfoCommand;
+use AmericanReading\PdfExtractor\Data\PdfInfo;
 use Ulrichsg\Getopt;
 use UnexpectedValueException;
 
@@ -23,14 +24,16 @@ class MyApp extends App implements ConfigInterface
     private $stdout;
     /** @var resource */
     private $stderr;
+    /** @var PdfInfo */
+    private $pdfInfo;
 
     public function __construct()
     {
-        $this->stdout = fopen('php://stdout', 'w', self::VERBOSITY_NORMAL);
-        $this->msg = new Messager($this->stdout);
+        $this->stdout = fopen('php://stdout', 'w');
+        $this->msg = new Messager($this->stdout, self::VERBOSITY_NORMAL);
 
-        $this->stderr = fopen('php://stderr', 'w', self::VERBOSITY_SILENT);
-        $this->err = new Messager($this->stderr);
+        $this->stderr = fopen('php://stderr', 'w');
+        $this->err = new Messager($this->stderr, self::VERBOSITY_SILENT);
     }
 
     public function __destruct()
@@ -44,7 +47,10 @@ class MyApp extends App implements ConfigInterface
         $this->readConfiguration();
         $this->readOptions($options);
         $this->msg->write("PDF Extractor\n", self::VERBOSITY_VERBOSE);
-        $this->readSourcePdf();
+        $this->readPdfInfo();
+
+        $this->msg->write($this->pdfInfo->getPageCount() . "\n", self::VERBOSITY_DEBUG);
+        $this->msg->write(print_r($this->pdfInfo->getPageSizes(), true), self::VERBOSITY_DEBUG);
     }
 
     protected function exitWithError($statusCode = 1, $message = null)
@@ -62,7 +68,7 @@ class MyApp extends App implements ConfigInterface
         // Read the default configurations into the Configuration instance.
         $configurations  = array(
             Util::joinPaths("phar://" . self::PHAR_NAME, self::CONFIGURATION_FILE_NAME),
-            Util::joinPaths(getenv("HOME"), self::CONFIGURATION_FILE_NAME),
+            Util::joinPaths(getenv("HOME"), '.' . self::CONFIGURATION_FILE_NAME),
             Util::joinPaths(getcwd(), self::CONFIGURATION_FILE_NAME)
         );
         foreach ($configurations as $conf) {
@@ -76,11 +82,12 @@ class MyApp extends App implements ConfigInterface
     {
         // Build the options.
         $getopt = new Getopt(array(
-            array('b',  'blank',   Getopt::REQUIRED_ARGUMENT, "Insert blank pages at the given locations."),
-            array('c',  'config',  Getopt::REQUIRED_ARGUMENT, "JSON file of configuration options."),
             array('h',  'help',    Getopt::NO_ARGUMENT,       "Show this help message."),
-            array('s',  'source',  Getopt::REQUIRED_ARGUMENT, "Path to the PDF to process."),
-            array('v',  'verbose', Getopt::NO_ARGUMENT,       "Verbose mode.")
+            array('i',  'source',  Getopt::REQUIRED_ARGUMENT, "Path to the PDF to process."),
+            array('c',  'config',  Getopt::REQUIRED_ARGUMENT, "JSON file of configuration options."),
+            array('v',  'verbose', Getopt::NO_ARGUMENT,       "Verbose mode. Show extra message."),
+            array(null, 'debug',   Getopt::NO_ARGUMENT,       "Show verbose and debug messages."),
+            array(null, 'silent',  Getopt::NO_ARGUMENT,       "Do not output messages.")
         ));
 
         // Parse.
@@ -106,20 +113,18 @@ class MyApp extends App implements ConfigInterface
             }
         }
 
-        // Update the app configuration.
-
-        // Verbose
-        if ($getopt->getOptions('verbose') !== null) {
-            $this->conf->set('verbose', $getopt->getOption('verbose'));
+        // Determine the verbosity.
+        if ($getopt->getOption('debug') !== null) {
+            $this->msg->setVerbosity(self::VERBOSITY_DEBUG);
+        } elseif ($getopt->getOption('silent') !== null) {
+            $this->msg->setVerbosity(self::VERBOSITY_SILENT);
+        } elseif ($getopt->getOption('verbose') !== null) {
+            $this->msg->setVerbosity(self::VERBOSITY_VERBOSE);
         }
 
         // Source
         if ($getopt->getOptions('source') !== null) {
             $this->conf->set('source', $getopt->getOption('source'));
-        }
-
-        if ($this->conf->get('verbose', false)) {
-            $this->msg->setVerbosity(self::VERBOSITY_VERBOSE);
         }
     }
 
@@ -136,25 +141,21 @@ class MyApp extends App implements ConfigInterface
         $this->conf->load($conf);
     }
 
-    private function readSourcePdf()
+    private function readPdfInfo()
     {
         $source = $this->conf->get('source');
 
         if ($source === null) {
-            throw new AppException("No source file provided. Please specify the path to a PDF with -s or --source.");
+            throw new AppException("No source file provided. Please specify the path to a PDF with -i or --source.");
         }
         if (!file_exists($source)) {
             throw new AppException("Source file '$source' not found.'");
         }
 
         $this->msg->write("Reading $source...\n");
-
-        $cmd = new Command(
-            self::IM_IDENTIFY,
-            '-format "%W %H\n" ' . $source);
-
+        $cmd = new ReadPdfInfoCommand($source, $this->conf);
+        $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
         $cmd->run();
-        print_r($cmd->getResults());
-
+        $this->pdfInfo = $cmd->getInfo();
     }
 }

@@ -1,7 +1,4 @@
 {
-    "insert-blank": [],
-    "verbose": false,
-
     // Paths to ImageMagick commands.
     "identify": "identify"
 }

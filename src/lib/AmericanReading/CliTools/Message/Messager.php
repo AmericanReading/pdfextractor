@@ -28,7 +28,7 @@ class Messager implements MessagerInterface
      * @param string $message The message to output
      * @param int $verbosity The level of verbosity
      */
-    public function write($message, $verbosity = 0)
+    public function write($message, $verbosity = null)
     {
         // Check if the caller supplied a verbosity level for the message.
         // If not, assume the application default.
