@@ -198,25 +198,58 @@ class MyApp extends App implements ConfigInterface
         for ($i = 0, $u = $this->pdfInfo->getPageCount(); $i < $u; $i++) {
 
             $sourcePage = $source . "[$i]";
-            $targetPage = Util::joinPaths($target, sprintf($outputPagePattern, $outoutPageIndex));
             $inputPageSize = $inputPageSizes[$i];
 
-            $cmd = new ConvertCommand($sourcePage, $targetPage, $this->conf);
-            $cmd->setCropSize($smallest);
-
+            // Center vertical. Offset x will be determined later.
             $offset = new Point(0,0);
-            if ($inputPageSize->width > $smallest->width) {
-                $offset->x = ($inputPageSize->width - $smallest->width) / 2;
-            }
             if ($inputPageSize->height > $smallest->height) {
                 $offset->y = ($inputPageSize->height - $smallest->height) / 2;
             }
-            $cmd->setCropOffset($offset);
 
-            $this->msg->write($cmd->getCommandLine() . "\n");
-            $cmd->run();
-            $outoutPageIndex++;
+            // Test if this input page is a spread containing two pages.
+            if ($this->pdfInfo->isSpread($inputPageSize)) {
 
+                // Spread
+
+                // Left Page
+                $targetPage = Util::joinPaths($target, sprintf($outputPagePattern, $outoutPageIndex));
+                $cmd = new ConvertCommand($sourcePage, $targetPage, $this->conf);
+                $cmd->setCropSize($smallest);
+                $offset->x = 0;
+                $cmd->setCropOffset($offset);
+                $this->msg->write($cmd->getCommandLine() . "\n");
+                $cmd->run();
+                $outoutPageIndex++;
+
+                // Right Page
+                $targetPage = Util::joinPaths($target, sprintf($outputPagePattern, $outoutPageIndex));
+                $cmd = new ConvertCommand($sourcePage, $targetPage, $this->conf);
+                $cmd->setCropSize($smallest);
+                $offset->x = $inputPageSize->width - $smallest->width;
+                $cmd->setCropOffset($offset);
+                $this->msg->write($cmd->getCommandLine() . "\n");
+                $cmd->run();
+                $outoutPageIndex++;
+
+            } else {
+
+                // Single Page
+
+                $targetPage = Util::joinPaths($target, sprintf($outputPagePattern, $outoutPageIndex));
+                $cmd = new ConvertCommand($sourcePage, $targetPage, $this->conf);
+                $cmd->setCropSize($smallest);
+
+                // Center the cropped portion within the input page.
+                if ($inputPageSize->width > $smallest->width) {
+                    $offset->x = ($inputPageSize->width - $smallest->width) / 2;
+                }
+                $cmd->setCropOffset($offset);
+
+                $this->msg->write($cmd->getCommandLine() . "\n");
+                $cmd->run();
+                $outoutPageIndex++;
+
+            }
         }
     }
 }
