@@ -2,6 +2,8 @@
 
 namespace AmericanReading\PdfExtractor\Data;
 
+use AmericanReading\Geometry\Size;
+
 class PdfInfo
 {
     const SPREAD_TOLERANCE = 0.8;
@@ -16,7 +18,7 @@ class PdfInfo
         $this->pageCount = count($pages);
         $this->pageSizes = array_map(function ($line) {
                 list($width, $height) = explode(' ', $line);
-                return new Dimension($width, $height);
+                return new Size($width, $height);
             }, $pages);
     }
 
@@ -57,7 +59,7 @@ class PdfInfo
      * Return a representation of the smallest width and height. Note that this may not reflect any
      * specific page as page 1 may have the smallest height while 2 has the smallest width.
      *
-     * @return Dimension
+     * @return Size
      */
     public function getSmallestPageSize()
     {
@@ -68,7 +70,7 @@ class PdfInfo
                 $width = min($width, $this->pageSizes[$i]->width);
                 $height = min($height, $this->pageSizes[$i]->height);
             }
-            $this->smallestPageSize = new Dimension($width, $height);
+            $this->smallestPageSize = new Size($width, $height);
         }
         return $this->smallestPageSize;
     }
@@ -77,7 +79,7 @@ class PdfInfo
      * Return a representation of the largest width and height. Note that this may not reflect any
      * specific page as page 1 may have the largest height while 2 has the largest width.
      *
-     * @return Dimension
+     * @return Size
      */
     public function getLargestPageSize()
     {
@@ -88,7 +90,7 @@ class PdfInfo
                 $width = max($width, $this->pageSizes[$i]->width);
                 $height = max($height, $this->pageSizes[$i]->height);
             }
-            $this->largestPageSize = new Dimension($width, $height);
+            $this->largestPageSize = new Size($width, $height);
         }
         return $this->largestPageSize;
     }
@@ -103,10 +105,10 @@ class PdfInfo
     }
 
     /**
-     * @param Dimension $pageSize The passed pageSize reflects a spread.
+     * @param Size $pageSize The passed pageSize reflects a spread.
      * @return bool
      */
-    public function isSpread(Dimension $pageSize)
+    public function isSpread(Size $pageSize)
     {
         $small = $this->getSmallestPageSize();
         return ($small->width * 2 * self::SPREAD_TOLERANCE <= $pageSize->width);

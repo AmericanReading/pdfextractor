@@ -1,4 +1,7 @@
 {
+    // Output directory. Override with --target or -o
+    "target": "./",
+    "page-pattern": "%03d.jpg",
     // Paths to ImageMagick commands.
     "identify": "identify"
 }

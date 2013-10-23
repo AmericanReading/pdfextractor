@@ -9,6 +9,7 @@ use AmericanReading\CliTools\App\AppException;
  */
 class ImageMagickCommand extends ConfiguredCommand
 {
+    const IM_CONVERT = 'convert';
     const IM_IDENTIFY = 'identify';
 
     public function run()

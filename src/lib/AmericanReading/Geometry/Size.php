@@ -1,13 +1,13 @@
 <?php
 
-namespace AmericanReading\PdfExtractor\Data;
+namespace AmericanReading\Geometry;
 
-class Dimension
+class Size
 {
     public $width;
     public $height;
 
-    public function __construct($width, $height)
+    public function __construct($width = 0, $height = 0)
     {
         $this->width = $width;
         $this->height = $height;

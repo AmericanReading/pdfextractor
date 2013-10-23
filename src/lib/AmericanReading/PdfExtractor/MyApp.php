@@ -7,6 +7,8 @@ use AmericanReading\CliTools\App\AppException;
 use AmericanReading\CliTools\Configuration\Configuration;
 use AmericanReading\CliTools\Message\Messager;
 use AmericanReading\CliTools\Message\MessagerInterface;
+use AmericanReading\Geometry\Point;
+use AmericanReading\PdfExtractor\Command\ConvertCommand;
 use AmericanReading\PdfExtractor\Command\ReadPdfInfoCommand;
 use AmericanReading\PdfExtractor\Data\PdfInfo;
 use Ulrichsg\Getopt;
@@ -48,6 +50,8 @@ class MyApp extends App implements ConfigInterface
         $this->readOptions($options);
         $this->msg->write("PDF Extractor\n", self::VERBOSITY_VERBOSE);
         $this->readPdfInfo();
+        $this->outputPages();
+
 
 
     }
@@ -83,6 +87,7 @@ class MyApp extends App implements ConfigInterface
         $getopt = new Getopt(array(
             array('h',  'help',    Getopt::NO_ARGUMENT,       "Show this help message."),
             array('i',  'source',  Getopt::REQUIRED_ARGUMENT, "Path to the PDF to process."),
+            array('o',  'target',  Getopt::REQUIRED_ARGUMENT, "Directory to write converted pages."),
             array('c',  'config',  Getopt::REQUIRED_ARGUMENT, "JSON file of configuration options."),
             array('v',  'verbose', Getopt::NO_ARGUMENT,       "Verbose mode. Show extra message."),
             array(null, 'debug',   Getopt::NO_ARGUMENT,       "Show verbose and debug messages."),
@@ -122,8 +127,13 @@ class MyApp extends App implements ConfigInterface
         }
 
         // Source
-        if ($getopt->getOptions('source') !== null) {
+        if ($getopt->getOption('source') !== null) {
             $this->conf->set('source', $getopt->getOption('source'));
+        }
+
+        // Target
+        if ($getopt->getOption('target') !== null) {
+            $this->conf->set('target', $getopt->getOption('target'));
         }
     }
 
@@ -151,7 +161,7 @@ class MyApp extends App implements ConfigInterface
             throw new AppException("Source file '$source' not found.'");
         }
 
-        $this->msg->write("Reading $source...\n");
+        $this->msg->write("Reading $source\n");
         $cmd = new ReadPdfInfoCommand($source, $this->conf);
         $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
         $cmd->run();
@@ -169,6 +179,44 @@ class MyApp extends App implements ConfigInterface
             $this->msg->write("Spreads.\n");
         } else {
             $this->msg->write("No spreads.\n");
+        }
+    }
+
+    private function outputPages()
+    {
+        $source = realpath($this->conf->get('source'));
+        $target = realpath($this->conf->get('target'));
+
+        $this->msg->write("Writing to $target\n", self::VERBOSITY_VERBOSE);
+
+        $outputPagePattern = $this->conf->get('page-pattern', '%03d.jpg');
+        $outoutPageIndex = 0;
+        $inputPageSizes = $this->pdfInfo->getPageSizes();
+
+        $smallest = $this->pdfInfo->getSmallestPageSize();
+
+        for ($i = 0, $u = $this->pdfInfo->getPageCount(); $i < $u; $i++) {
+
+            $sourcePage = $source . "[$i]";
+            $targetPage = Util::joinPaths($target, sprintf($outputPagePattern, $outoutPageIndex));
+            $inputPageSize = $inputPageSizes[$i];
+
+            $cmd = new ConvertCommand($sourcePage, $targetPage, $this->conf);
+            $cmd->setCropSize($smallest);
+
+            $offset = new Point(0,0);
+            if ($inputPageSize->width > $smallest->width) {
+                $offset->x = ($inputPageSize->width - $smallest->width) / 2;
+            }
+            if ($inputPageSize->height > $smallest->height) {
+                $offset->y = ($inputPageSize->height - $smallest->height) / 2;
+            }
+            $cmd->setCropOffset($offset);
+
+            $this->msg->write($cmd->getCommandLine() . "\n");
+            $cmd->run();
+            $outoutPageIndex++;
+
         }
     }
 }
