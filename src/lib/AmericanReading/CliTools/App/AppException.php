@@ -1,6 +1,6 @@
 <?php
 
-namespace AmericanReading\CliApp;
+namespace AmericanReading\CliTools\App;
 
 use Exception;
 
@@ -12,6 +12,10 @@ use Exception;
  * Class CliAppException
  * @package AmericanReading\CliApp
  */
-class CliAppException extends Exception
+class AppException extends Exception
 {
+    public function __construct($message = "", $code = 1, $previous = null)
+    {
+        parent::__construct($message, $code, $previous);
+    }
 }

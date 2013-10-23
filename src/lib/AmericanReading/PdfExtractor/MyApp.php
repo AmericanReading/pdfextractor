@@ -2,34 +2,57 @@
 
 namespace AmericanReading\PdfExtractor;
 
-use AmericanReading\CliApp\CliApp;
-use AmericanReading\CliApp\CliAppException;
-use AmericanReading\Configuration\Configuration;
-use AmericanReading\Configuration\ReadableConfigurationInterface;
-use AmericanReading\PdfExtractor\Command\ImageMagickCommand;
+use AmericanReading\CliTools\App\App;
+use AmericanReading\CliTools\App\AppException;
+use AmericanReading\CliTools\Command\Command;
+use AmericanReading\CliTools\Message\Messager;
+use AmericanReading\CliTools\Message\MessagerInterface;
+use AmericanReading\CliTools\Configuration\Configuration;
 use Ulrichsg\Getopt;
 use UnexpectedValueException;
 
-class App extends CliApp implements ConfigInterface
+class MyApp extends App implements ConfigInterface
 {
     /** @var Configuration */
     private $conf;
+    /** @var MessagerInterface  */
+    private $msg;
+    /** @var MessagerInterface  */
+    private $err;
+    /** @var resource */
+    private $stdout;
+    /** @var resource */
+    private $stderr;
 
-    public function main($options = null)
+    public function __construct()
+    {
+        $this->stdout = fopen('php://stdout', 'w', self::VERBOSITY_NORMAL);
+        $this->msg = new Messager($this->stdout);
+
+        $this->stderr = fopen('php://stderr', 'w', self::VERBOSITY_SILENT);
+        $this->err = new Messager($this->stderr);
+    }
+
+    public function __destruct()
+    {
+        fclose($this->stdout);
+        fclose($this->stderr);
+    }
+
+    protected function main($options = null)
     {
         $this->readConfiguration();
         $this->readOptions($options);
-        $this->message("PDF Extractor\n", self::VERBOSITY_VERBOSE);
+        $this->msg->write("PDF Extractor\n", self::VERBOSITY_VERBOSE);
         $this->readSourcePdf();
-
     }
 
-    /**
-     * @return ReadableConfigurationInterface
-     */
-    public function getConfiguration()
+    protected function exitWithError($statusCode = 1, $message = null)
     {
-        return $this->conf;
+        if (!is_null($message)) {
+            $this->err->write($message . "\n");
+        }
+        exit($statusCode);
     }
 
     private function readConfiguration()
@@ -44,10 +67,7 @@ class App extends CliApp implements ConfigInterface
         );
         foreach ($configurations as $conf) {
             if (file_exists($conf)) {
-                $conf = file_get_contents($conf);
-                $conf = Util::stripJsonComments($conf);
-                $conf = json_decode($conf);
-                $this->conf->load($conf);
+                $this->loadConfiguration($conf);
             }
         }
     }
@@ -58,7 +78,6 @@ class App extends CliApp implements ConfigInterface
         $getopt = new Getopt(array(
             array('b',  'blank',   Getopt::REQUIRED_ARGUMENT, "Insert blank pages at the given locations."),
             array('c',  'config',  Getopt::REQUIRED_ARGUMENT, "JSON file of configuration options."),
-            array(null, 'debug',   Getopt::NO_ARGUMENT,       "Show debugging information."),
             array('h',  'help',    Getopt::NO_ARGUMENT,       "Show this help message."),
             array('s',  'source',  Getopt::REQUIRED_ARGUMENT, "Path to the PDF to process."),
             array('v',  'verbose', Getopt::NO_ARGUMENT,       "Verbose mode.")
@@ -68,7 +87,7 @@ class App extends CliApp implements ConfigInterface
         try {
             $getopt->parse($options);
         } catch (UnexpectedValueException $e) {
-            throw new CliAppException($e->getMessage() . "\nTry --help for a list of options.", 1);
+            throw new AppException($e->getMessage() . "\nTry --help for a list of options.");
         }
 
         // Help. Show help and exit.
@@ -81,21 +100,13 @@ class App extends CliApp implements ConfigInterface
         if ($getopt->getOption('config')) {
             $configuration = $getopt->getOption('config');
             if (file_exists(realpath($configuration))) {
-                $conf = file_get_contents(realpath($configuration));
-                $conf = Util::stripJsonComments($conf);
-                $conf = json_decode($conf);
-                $this->conf->load($conf);
+                $this->loadConfiguration($configuration);
             } else {
-                $this->errorWrite("Unable to read configuration file '$configuration'.\n");
+                $this->err->write("Unable to read configuration file '$configuration'.\n");
             }
         }
 
         // Update the app configuration.
-
-        // Debug
-        if ($getopt->getOptions('debug') !== null) {
-            $this->conf->set('debug', $getopt->getOption('debug'));
-        }
 
         // Verbose
         if ($getopt->getOptions('verbose') !== null) {
@@ -107,31 +118,43 @@ class App extends CliApp implements ConfigInterface
             $this->conf->set('source', $getopt->getOption('source'));
         }
 
-        // Read the configuration.
-        $this->debugMode = $this->conf->get('debug', false);
-
         if ($this->conf->get('verbose', false)) {
-            $this->verbosity = self::VERBOSITY_VERBOSE;
+            $this->msg->setVerbosity(self::VERBOSITY_VERBOSE);
         }
+    }
+
+    /**
+     * Read a configruation file, strip comments, decode JSON, and merge into configuration.
+     *
+     * @param string $filePath Path to configuration file.
+     */
+    private function loadConfiguration($filePath)
+    {
+        $conf = file_get_contents($filePath);
+        $conf = Util::stripJsonComments($conf);
+        $conf = json_decode($conf);
+        $this->conf->load($conf);
     }
 
     private function readSourcePdf()
     {
         $source = $this->conf->get('source');
+
         if ($source === null) {
-            throw new CliAppException("No source file provided. Please specify the path to a PDF with -s or --source.", 1);
+            throw new AppException("No source file provided. Please specify the path to a PDF with -s or --source.");
         }
         if (!file_exists($source)) {
-            throw new CliAppException("Source file '$source' not found.'", 1);
+            throw new AppException("Source file '$source' not found.'");
         }
 
-        $this->message("Reading $source...\n");
+        $this->msg->write("Reading $source...\n");
 
-        $cmd = new ImageMagickCommand(
+        $cmd = new Command(
             self::IM_IDENTIFY,
-            '-format "%W %H\n" ' . $source,
-            $this->getConfiguration());
+            '-format "%W %H\n" ' . $source);
+
         $cmd->run();
         print_r($cmd->getResults());
+
     }
 }

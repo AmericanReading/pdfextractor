@@ -1,6 +1,6 @@
 <?php
 
-namespace AmericanReading\Configuration;
+namespace AmericanReading\CliTools\Configuration;
 
 use stdClass;
 
