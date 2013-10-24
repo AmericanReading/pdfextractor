@@ -66,11 +66,26 @@ class MyApp extends App implements ConfigInterface
         $this->conf = new Configuration();
 
         // Read the default configurations into the Configuration instance.
-        $configurations  = array(
-            Util::pharPath(self::CONFIGURATION_FILE_NAME),
-            Util::joinPaths(getenv("HOME"), '.' . self::CONFIGURATION_FILE_NAME),
-            Util::joinPaths(getcwd(), self::CONFIGURATION_FILE_NAME)
-        );
+        $configurations = array();
+
+        // Built-in configuration
+        $configurations[] = Util::pharPath(self::CONFIGURATION_FILE_NAME);
+
+        // User ~/.pdfextractor.json
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            $configurations[] = Util::joinPaths(
+                $_SERVER['HOMEDRIVE'],
+                $_SERVER['HOMEPATH'],
+                '.' . self::CONFIGURATION_FILE_NAME);
+        } else {
+            $configurations[] = Util::joinPaths(
+                $_SERVER['HOME'],
+                '.' . self::CONFIGURATION_FILE_NAME);
+        }
+
+        // Working directory: ./pdfextractor.json
+        $configurations[] = Util::joinPaths(getcwd(), self::CONFIGURATION_FILE_NAME);
+
         foreach ($configurations as $conf) {
             if (file_exists($conf)) {
                 $this->loadConfiguration($conf);
