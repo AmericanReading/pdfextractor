@@ -89,6 +89,8 @@ class MyApp extends App implements ConfigInterface
             array('i',  'source',  Getopt::REQUIRED_ARGUMENT, "Path to the PDF to process."),
             array('o',  'target',  Getopt::REQUIRED_ARGUMENT, "Directory to write converted pages."),
             array('c',  'config',  Getopt::REQUIRED_ARGUMENT, "JSON file of configuration options."),
+            array(null, 'density', Getopt::REQUIRED_ARGUMENT, "Source density for ImageMagick commands. Ex: \"--density=300\""),
+            array(null, 'resize',  Getopt::REQUIRED_ARGUMENT, "Target dimensions. Ex: \"--resize=1920x1536\""),
             array('v',  'verbose', Getopt::NO_ARGUMENT,       "Verbose mode. Show extra message."),
             array(null, 'debug',   Getopt::NO_ARGUMENT,       "Show verbose and debug messages."),
             array(null, 'silent',  Getopt::NO_ARGUMENT,       "Do not output messages.")
@@ -135,6 +137,16 @@ class MyApp extends App implements ConfigInterface
         if ($getopt->getOption('target') !== null) {
             $this->conf->set('target', $getopt->getOption('target'));
         }
+
+        // Density
+        if ($getopt->getOption('density') !== null) {
+            $this->conf->set('density', $getopt->getOption('density'));
+        }
+
+        // Resize
+        if ($getopt->getOption('resize') !== null) {
+            $this->conf->set('resize', $getopt->getOption('resize'));
+        }
     }
 
     /**
@@ -166,8 +178,11 @@ class MyApp extends App implements ConfigInterface
         $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
         $cmd->run();
         $this->pdfInfo = $cmd->getInfo();
-        $this->msg->write($this->pdfInfo->getPageCount() . "\n", self::VERBOSITY_DEBUG);
-        $this->msg->write(print_r($this->pdfInfo->getPageSizes(), true), self::VERBOSITY_DEBUG);
+        $this->msg->write("Page Count: " . $this->pdfInfo->getPageCount() . "\n", self::VERBOSITY_DEBUG);
+        $this->msg->write("Page Sizes:\n", self::VERBOSITY_DEBUG);
+        foreach ($this->pdfInfo->getPageSizes() as $index => $size) {
+            $this->msg->write("[$index] $size\n", self::VERBOSITY_DEBUG);
+        }
         if ($this->pdfInfo->isUniform()) {
             $this->msg->write("All pages are the same dimensions.\n");
         } else {

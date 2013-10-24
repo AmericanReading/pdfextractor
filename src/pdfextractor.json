@@ -2,6 +2,19 @@
     // Output directory. Override with --target or -o
     "target": "./",
     "page-pattern": "%03d.jpg",
+
+    // Format, quality, etc.
+
+    // Source density for ImageMagick commands.
+    // Override with --density
+    "density": null,
+
+    // Resize dimensions as string.
+    // Override with --resize
+    //"resize": "1920x1536"
+    "resize": null,
+
     // Paths to ImageMagick commands.
+    "convert": "convert",
     "identify": "identify"
 }
