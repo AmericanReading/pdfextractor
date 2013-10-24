@@ -51,9 +51,6 @@ class MyApp extends App implements ConfigInterface
         $this->msg->write("PDF Extractor\n", self::VERBOSITY_VERBOSE);
         $this->readPdfInfo();
         $this->outputPages();
-
-
-
     }
 
     protected function exitWithError($statusCode = 1, $message = null)
@@ -70,7 +67,7 @@ class MyApp extends App implements ConfigInterface
 
         // Read the default configurations into the Configuration instance.
         $configurations  = array(
-            Util::joinPaths("phar://" . self::PHAR_NAME, self::CONFIGURATION_FILE_NAME),
+            Util::pharPath(self::CONFIGURATION_FILE_NAME),
             Util::joinPaths(getenv("HOME"), '.' . self::CONFIGURATION_FILE_NAME),
             Util::joinPaths(getcwd(), self::CONFIGURATION_FILE_NAME)
         );
@@ -169,6 +166,7 @@ class MyApp extends App implements ConfigInterface
         if ($source === null) {
             throw new AppException("No source file provided. Please specify the path to a PDF with -i or --source.");
         }
+        $source = realpath($source);
         if (!file_exists($source)) {
             throw new AppException("Source file '$source' not found.'");
         }
@@ -200,8 +198,13 @@ class MyApp extends App implements ConfigInterface
     private function outputPages()
     {
         $source = realpath($this->conf->get('source'));
-        $target = realpath($this->conf->get('target'));
-
+        $target = $this->conf->get('target');
+        if (!is_dir(realpath($target))) {
+            if (!mkdir($target, null, true)) {
+                throw new AppException("Unable to create directory $target");
+            }
+        }
+        $target = realpath($target);
         $this->msg->write("Writing to $target\n", self::VERBOSITY_VERBOSE);
 
         $outputPagePattern = $this->conf->get('page-pattern', '%03d.jpg');

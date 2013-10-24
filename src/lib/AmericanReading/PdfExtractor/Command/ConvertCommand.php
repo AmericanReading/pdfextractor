@@ -39,10 +39,9 @@ class ConvertCommand extends ImageMagickCommand
             $cmd[] = "-resize $resize";
         }
 
-        $cmd[] = $this->source;
-        $cmd[] = $this->target;
+        $cmd[] = '"' . $this->source . '"';
+        $cmd[] = '"' . $this->target . '"';
 
-        $cmd[] = '2> /dev/null';
         return join(' ', $cmd);
     }
 

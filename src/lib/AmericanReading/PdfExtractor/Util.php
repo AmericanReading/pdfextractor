@@ -41,17 +41,17 @@ class Util implements ConfigInterface
         }
 
         // Check if the initial argument began with a slash.
-        $startingSlash = $paths[0][0] === '/';
+        $startingSlash = $paths[0][0] === DIRECTORY_SEPARATOR;
 
         // Strip slashes from the ends of all the members,
         $paths = array_map(function ($path) {
-                return trim($path, '/');
+                return trim($path, DIRECTORY_SEPARATOR);
             }, $paths);
 
         // Join the items with slashes. Re-add the starting slash, if needed.
-        $path = join('/', $paths);
+        $path = join(DIRECTORY_SEPARATOR, $paths);
         if ($startingSlash) {
-            $path = '/' . $path;
+            $path = DIRECTORY_SEPARATOR . $path;
         }
         return $path;
     }

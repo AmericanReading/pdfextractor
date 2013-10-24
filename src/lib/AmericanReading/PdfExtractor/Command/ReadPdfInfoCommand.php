@@ -10,10 +10,14 @@ class ReadPdfInfoCommand extends ImageMagickCommand
     private $info;
     private $source;
 
-    public function __construct($souce, ReadableConfigurationInterface $configuration)
+    /**
+     * @param string $source
+     * @param ReadableConfigurationInterface $configuration
+     */
+    public function __construct($source, ReadableConfigurationInterface $configuration)
     {
         parent::__construct($configuration);
-        $this->source = $souce;
+        $this->source = $source;
     }
 
     public function getCommandLine()
@@ -21,8 +25,7 @@ class ReadPdfInfoCommand extends ImageMagickCommand
         $cmd = array($this->configuration->get(self::IM_IDENTIFY));
         $cmd = array_merge($cmd, $this->getCommonArguments());
         $cmd[] = '-format "%W %H\n"';
-        $cmd[] = $this->source;
-        $cmd[] = '2> /dev/null';
+        $cmd[] = '"' . $this->source . '"';
         return join(' ', $cmd);
     }
 
