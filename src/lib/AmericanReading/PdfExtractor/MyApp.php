@@ -86,9 +86,11 @@ class MyApp extends App implements ConfigInterface
             array('i',  'source',  Getopt::REQUIRED_ARGUMENT, "Path to the PDF to process."),
             array('o',  'target',  Getopt::REQUIRED_ARGUMENT, "Directory to write converted pages."),
             array('c',  'config',  Getopt::REQUIRED_ARGUMENT, "JSON file of configuration options."),
+            array('v',  'verbose', Getopt::NO_ARGUMENT,       "Verbose mode. Show extra message."),
             array(null, 'density', Getopt::REQUIRED_ARGUMENT, "Source density for ImageMagick commands. Ex: \"--density=300\""),
             array(null, 'resize',  Getopt::REQUIRED_ARGUMENT, "Target dimensions. Ex: \"--resize=1920x1536\""),
-            array('v',  'verbose', Getopt::NO_ARGUMENT,       "Verbose mode. Show extra message."),
+            array(null, 'quality', Getopt::REQUIRED_ARGUMENT, "Target JPEG qualiy from 1-100 (100 least compressed)"),
+            array(null, 'gutter',  Getopt::REQUIRED_ARGUMENT, "Pixels to ignore at the center of spreads."),
             array(null, 'debug',   Getopt::NO_ARGUMENT,       "Show verbose and debug messages."),
             array(null, 'silent',  Getopt::NO_ARGUMENT,       "Do not output messages.")
         ));
@@ -143,6 +145,16 @@ class MyApp extends App implements ConfigInterface
         // Resize
         if ($getopt->getOption('resize') !== null) {
             $this->conf->set('resize', $getopt->getOption('resize'));
+        }
+
+        // Quality
+        if ($getopt->getOption('quality') !== null) {
+            $this->conf->set('quality', $getopt->getOption('quality'));
+        }
+
+        // Gutter
+        if ($getopt->getOption('gutter') !== null) {
+            $this->conf->set('gutter', $getopt->getOption('gutter'));
         }
     }
 
@@ -200,7 +212,7 @@ class MyApp extends App implements ConfigInterface
         $source = realpath($this->conf->get('source'));
         $target = $this->conf->get('target');
         if (!is_dir(realpath($target))) {
-            if (!mkdir($target, null, true)) {
+            if (!mkdir($target, 0777, true)) {
                 throw new AppException("Unable to create directory $target");
             }
         }
@@ -212,6 +224,17 @@ class MyApp extends App implements ConfigInterface
         $inputPageSizes = $this->pdfInfo->getPageSizes();
 
         $smallest = $this->pdfInfo->getSmallestPageSize();
+
+        // If this PDF contains spreads and there is a gutter, re-calculate the smallest page.
+        $gutter = $this->conf->get("gutter", 0);
+        if ($this->pdfInfo->containsSpreads() && $gutter > 0) {
+            foreach ($inputPageSizes as $inputPagesize) {
+                if ($this->pdfInfo->isSpread($inputPagesize)) {
+                    $singlePage = ($inputPagesize->width / 2) - $gutter;
+                    $smallest->width = min($smallest->width, $singlePage);
+                }
+            }
+        }
 
         for ($i = 0, $u = $this->pdfInfo->getPageCount(); $i < $u; $i++) {
 

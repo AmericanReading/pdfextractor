@@ -39,6 +39,11 @@ class ConvertCommand extends ImageMagickCommand
             $cmd[] = "-resize $resize";
         }
 
+        $quality = $this->configuration->get("quality");
+        if ($quality !== null) {
+            $cmd[] = "-quality $quality";
+        }
+
         $cmd[] = '"' . $this->source . '"';
         $cmd[] = '"' . $this->target . '"';
 
