@@ -8,6 +8,7 @@ use AmericanReading\CliTools\Configuration\Configuration;
 use AmericanReading\CliTools\Message\Messager;
 use AmericanReading\CliTools\Message\MessagerInterface;
 use AmericanReading\Geometry\Point;
+use AmericanReading\PdfExtractor\Command\BlankPageCommand;
 use AmericanReading\PdfExtractor\Command\ConvertCommand;
 use AmericanReading\PdfExtractor\Command\ReadPdfInfoCommand;
 use AmericanReading\PdfExtractor\Data\PdfInfo;
@@ -106,6 +107,7 @@ class MyApp extends App implements ConfigInterface
             array(null, 'resize',  Getopt::REQUIRED_ARGUMENT, "Target dimensions. Ex: \"--resize=1920x1536\""),
             array(null, 'quality', Getopt::REQUIRED_ARGUMENT, "Target JPEG qualiy from 1-100 (100 least compressed)"),
             array(null, 'gutter',  Getopt::REQUIRED_ARGUMENT, "Pixels to ignore at the center of spreads."),
+            array(null, 'blank',   Getopt::REQUIRED_ARGUMENT, "List of blank pages to insert."),
             array(null, 'debug',   Getopt::NO_ARGUMENT,       "Show verbose and debug messages."),
             array(null, 'silent',  Getopt::NO_ARGUMENT,       "Do not output messages.")
         ));
@@ -170,6 +172,11 @@ class MyApp extends App implements ConfigInterface
         // Gutter
         if ($getopt->getOption('gutter') !== null) {
             $this->conf->set('gutter', $getopt->getOption('gutter'));
+        }
+
+        // Blank
+        if ($getopt->getOption('blank') !== null) {
+            $this->conf->set('blank', explode(',', $getopt->getOption('blank')));
         }
     }
 
@@ -251,6 +258,9 @@ class MyApp extends App implements ConfigInterface
             }
         }
 
+        // List of page indexes at which to insert blank pages.
+        $blanks = $this->conf->get("blank");
+
         for ($i = 0, $u = $this->pdfInfo->getPageCount(); $i < $u; $i++) {
 
             $sourcePage = $source . "[$i]";
@@ -260,6 +270,15 @@ class MyApp extends App implements ConfigInterface
             $offset = new Point(0,0);
             if ($inputPageSize->height > $smallest->height) {
                 $offset->y = ($inputPageSize->height - $smallest->height) / 2;
+            }
+
+            // Insert blank page.
+            if (in_array($outoutPageIndex, $blanks)) {
+                $targetPage = Util::joinPaths($target, sprintf($outputPagePattern, $outoutPageIndex));
+                $cmd = new BlankPageCommand((string) $smallest, $targetPage, $this->conf);
+                $this->msg->write($cmd->getCommandLine() . "\n");
+                $cmd->run();
+                $outoutPageIndex++;
             }
 
             // Test if this input page is a spread containing two pages.

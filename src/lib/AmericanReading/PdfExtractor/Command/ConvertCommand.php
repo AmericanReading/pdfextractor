@@ -14,6 +14,11 @@ class ConvertCommand extends ImageMagickCommand
     private $cropSize;
     private $cropOffset;
 
+    /**
+     * @param string $source
+     * @param string $target
+     * @param ReadableConfigurationInterface $configuration
+     */
     public function __construct($source, $target, ReadableConfigurationInterface $configuration)
     {
         parent::__construct($configuration);
@@ -23,7 +28,10 @@ class ConvertCommand extends ImageMagickCommand
 
     public function getCommandLine()
     {
-        $cmd = array($this->configuration->get(self::IM_CONVERT));
+        $cmd = array(
+            $this->configuration->get(self::IM_CONVERT),
+            '-colorspace sRGB'
+        );
         $cmd = array_merge($cmd, $this->getCommonArguments());
 
         if (isset($this->cropSize)) {
