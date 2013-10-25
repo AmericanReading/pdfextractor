@@ -98,18 +98,22 @@ class MyApp extends App implements ConfigInterface
     {
         // Build the options.
         $getopt = new Getopt(array(
-            array('h',  'help',    Getopt::NO_ARGUMENT,       "Show this help message."),
-            array('i',  'source',  Getopt::REQUIRED_ARGUMENT, "Path to the PDF to process."),
-            array('o',  'target',  Getopt::REQUIRED_ARGUMENT, "Directory to write converted pages."),
-            array('c',  'config',  Getopt::REQUIRED_ARGUMENT, "JSON file of configuration options."),
-            array('v',  'verbose', Getopt::NO_ARGUMENT,       "Verbose mode. Show extra message."),
-            array(null, 'density', Getopt::REQUIRED_ARGUMENT, "Source density for ImageMagick commands. Ex: \"--density=300\""),
-            array(null, 'resize',  Getopt::REQUIRED_ARGUMENT, "Target dimensions. Ex: \"--resize=1920x1536\""),
-            array(null, 'quality', Getopt::REQUIRED_ARGUMENT, "Target JPEG qualiy from 1-100 (100 least compressed)"),
-            array(null, 'gutter',  Getopt::REQUIRED_ARGUMENT, "Pixels to ignore at the center of spreads."),
-            array(null, 'blank',   Getopt::REQUIRED_ARGUMENT, "List of blank pages to insert."),
-            array(null, 'debug',   Getopt::NO_ARGUMENT,       "Show verbose and debug messages."),
-            array(null, 'silent',  Getopt::NO_ARGUMENT,       "Do not output messages.")
+            array('h',  'help',       Getopt::NO_ARGUMENT,       "Show this help message."),
+            array('v',  'verbose',    Getopt::NO_ARGUMENT,       "Verbose mode. Show extra message."),
+            array('c',  'config',     Getopt::REQUIRED_ARGUMENT, "JSON file of configuration options."),
+            array('i',  'source',     Getopt::REQUIRED_ARGUMENT, "Path to the PDF to process."),
+            array('o',  'output',     Getopt::OPTIONAL_ARGUMENT, "Write image files to a directory with the same name as the source PDF base name. If an optional path is provded, this directory will be inside the provided path."),
+            array('t',  'target',     Getopt::REQUIRED_ARGUMENT, "Write image files to a directory at the specified path. (Supercedes --output)"),
+            array('p',  'pages',      Getopt::REQUIRED_ARGUMENT, "list of page number or ranges to export. Ex: \"--pages=1,4-6,10\""),
+            array(null, 'blank',      Getopt::REQUIRED_ARGUMENT, "List of blank pages to insert. Ex: \"--blank=2,4\""),
+            array(null, 'colorspace', Getopt::REQUIRED_ARGUMENT, "Convert to the specified colorspace. Ex: \"--colorspace=RGB\""),
+            array(null, 'density',    Getopt::REQUIRED_ARGUMENT, "Source density for ImageMagick commands. Ex: \"--density=300\""),
+            array(null, 'gutter',     Getopt::REQUIRED_ARGUMENT, "Pixels to ignore at the center of spreads. Ex: \"--gutter=75\""),
+            array(null, 'quality',    Getopt::REQUIRED_ARGUMENT, "Target JPEG qualiy from 1-100 (100 least compressed) Ex: \"--quality=90\""),
+            array(null, 'resize',     Getopt::REQUIRED_ARGUMENT, "Target dimensions. Ex: \"--resize=1920x1536\""),
+            array(null, 'magick',     Getopt::REQUIRED_ARGUMENT, "Any extra parameted to pass through to the ImageMagick convert command."),
+            array(null, 'debug',      Getopt::NO_ARGUMENT,       "Show verbose and debug messages."),
+            array(null, 'silent',     Getopt::NO_ARGUMENT,       "Do not output messages.")
         ));
 
         // Parse.
@@ -152,6 +156,45 @@ class MyApp extends App implements ConfigInterface
         // Target
         if ($getopt->getOption('target') !== null) {
             $this->conf->set('target', $getopt->getOption('target'));
+        } elseif ($getopt->getOption('output') !== null) {
+
+            // Determine the name for the directory to output to based on the input file name.
+            $source = $this->conf->get('source');
+            $info = pathinfo($source);
+            $directory = basename($source, '.' . $info['extension']);
+
+            $output = $getopt->getOption('output');
+            if (is_string($output)) {
+                $directory = Util::joinPaths($output, $directory);
+            }
+
+            $this->conf->set('target', $directory);
+        }
+
+        // Pages
+        if ($getopt->getOption('pages') !== null) {
+            $pages = array();
+            $items = explode(',', $getopt->getOption('pages'));
+            foreach ($items as $item) {
+                if (is_numeric($item)) {
+                    $pages[] = $item;
+                } elseif (substr_count($item, '-') === 1) {
+                    list($lower, $upper) = explode('-', $item);
+                    $pages = array_merge($pages, range($lower, $upper));
+                }
+            }
+            $pages = array_unique($pages, SORT_NUMERIC);
+            $this->conf->set('pages', $pages);
+        }
+
+        // Blank
+        if ($getopt->getOption('blank') !== null) {
+            $this->conf->set('blank', explode(',', $getopt->getOption('blank')));
+        }
+
+        // Colorspace
+        if ($getopt->getOption('colorspace') !== null) {
+            $this->conf->set('colorspace', $getopt->getOption('colorspace'));
         }
 
         // Density
@@ -159,9 +202,9 @@ class MyApp extends App implements ConfigInterface
             $this->conf->set('density', $getopt->getOption('density'));
         }
 
-        // Resize
-        if ($getopt->getOption('resize') !== null) {
-            $this->conf->set('resize', $getopt->getOption('resize'));
+        // Gutter
+        if ($getopt->getOption('gutter') !== null) {
+            $this->conf->set('gutter', $getopt->getOption('gutter'));
         }
 
         // Quality
@@ -169,14 +212,14 @@ class MyApp extends App implements ConfigInterface
             $this->conf->set('quality', $getopt->getOption('quality'));
         }
 
-        // Gutter
-        if ($getopt->getOption('gutter') !== null) {
-            $this->conf->set('gutter', $getopt->getOption('gutter'));
+        // Resize
+        if ($getopt->getOption('resize') !== null) {
+            $this->conf->set('resize', $getopt->getOption('resize'));
         }
 
-        // Blank
-        if ($getopt->getOption('blank') !== null) {
-            $this->conf->set('blank', explode(',', $getopt->getOption('blank')));
+        // Magick
+        if ($getopt->getOption('magick') !== null) {
+            $this->conf->set('magick', $getopt->getOption('magick'));
         }
     }
 
@@ -242,7 +285,7 @@ class MyApp extends App implements ConfigInterface
         $this->msg->write("Writing to $target\n", self::VERBOSITY_VERBOSE);
 
         $outputPagePattern = $this->conf->get('page-pattern', '%03d.jpg');
-        $outoutPageIndex = 0;
+        $outoutPageIndex = 1;
         $inputPageSizes = $this->pdfInfo->getPageSizes();
 
         $smallest = $this->pdfInfo->getSmallestPageSize();
@@ -261,6 +304,10 @@ class MyApp extends App implements ConfigInterface
         // List of page indexes at which to insert blank pages.
         $blanks = $this->conf->get("blank");
 
+        // Find the list of pages to export.
+        $pagesToExport = $this->conf->get('pages');
+        $exportAllPages = is_null($pagesToExport);
+
         for ($i = 0, $u = $this->pdfInfo->getPageCount(); $i < $u; $i++) {
 
             $sourcePage = $source . "[$i]";
@@ -274,10 +321,12 @@ class MyApp extends App implements ConfigInterface
 
             // Insert blank page.
             if (in_array($outoutPageIndex, $blanks)) {
-                $targetPage = Util::joinPaths($target, sprintf($outputPagePattern, $outoutPageIndex));
-                $cmd = new BlankPageCommand((string) $smallest, $targetPage, $this->conf);
-                $this->msg->write($cmd->getCommandLine() . "\n");
-                $cmd->run();
+                if ($exportAllPages || in_array($outoutPageIndex, $pagesToExport)) {
+                    $targetPage = Util::joinPaths($target, sprintf($outputPagePattern, $outoutPageIndex));
+                    $cmd = new BlankPageCommand((string) $smallest, $targetPage, $this->conf);
+                    $this->msg->write($cmd->getCommandLine() . "\n");
+                    $cmd->run();
+                }
                 $outoutPageIndex++;
             }
 
@@ -287,41 +336,44 @@ class MyApp extends App implements ConfigInterface
                 // Spread
 
                 // Left Page
-                $targetPage = Util::joinPaths($target, sprintf($outputPagePattern, $outoutPageIndex));
-                $cmd = new ConvertCommand($sourcePage, $targetPage, $this->conf);
-                $cmd->setCropSize($smallest);
-                $offset->x = 0;
-                $cmd->setCropOffset($offset);
-                $this->msg->write($cmd->getCommandLine() . "\n");
-                $cmd->run();
+                if ($exportAllPages || in_array($outoutPageIndex, $pagesToExport)) {
+                    $targetPage = Util::joinPaths($target, sprintf($outputPagePattern, $outoutPageIndex));
+                    $cmd = new ConvertCommand($sourcePage, $targetPage, $this->conf);
+                    $cmd->setCropSize($smallest);
+                    $offset->x = 0;
+                    $cmd->setCropOffset($offset);
+                    $this->msg->write($cmd->getCommandLine() . "\n");
+                    $cmd->run();
+                }
                 $outoutPageIndex++;
 
                 // Right Page
-                $targetPage = Util::joinPaths($target, sprintf($outputPagePattern, $outoutPageIndex));
-                $cmd = new ConvertCommand($sourcePage, $targetPage, $this->conf);
-                $cmd->setCropSize($smallest);
-                $offset->x = $inputPageSize->width - $smallest->width;
-                $cmd->setCropOffset($offset);
-                $this->msg->write($cmd->getCommandLine() . "\n");
-                $cmd->run();
+                if ($exportAllPages || in_array($outoutPageIndex, $pagesToExport)) {
+                    $targetPage = Util::joinPaths($target, sprintf($outputPagePattern, $outoutPageIndex));
+                    $cmd = new ConvertCommand($sourcePage, $targetPage, $this->conf);
+                    $cmd->setCropSize($smallest);
+                    $offset->x = $inputPageSize->width - $smallest->width;
+                    $cmd->setCropOffset($offset);
+                    $this->msg->write($cmd->getCommandLine() . "\n");
+                    $cmd->run();
+                }
                 $outoutPageIndex++;
 
             } else {
 
                 // Single Page
-
-                $targetPage = Util::joinPaths($target, sprintf($outputPagePattern, $outoutPageIndex));
-                $cmd = new ConvertCommand($sourcePage, $targetPage, $this->conf);
-                $cmd->setCropSize($smallest);
-
-                // Center the cropped portion within the input page.
-                if ($inputPageSize->width > $smallest->width) {
-                    $offset->x = ($inputPageSize->width - $smallest->width) / 2;
+                if ($exportAllPages || in_array($outoutPageIndex, $pagesToExport)) {
+                    $targetPage = Util::joinPaths($target, sprintf($outputPagePattern, $outoutPageIndex));
+                    $cmd = new ConvertCommand($sourcePage, $targetPage, $this->conf);
+                    $cmd->setCropSize($smallest);
+                    // Center the cropped portion within the input page.
+                    if ($inputPageSize->width > $smallest->width) {
+                        $offset->x = ($inputPageSize->width - $smallest->width) / 2;
+                    }
+                    $cmd->setCropOffset($offset);
+                    $this->msg->write($cmd->getCommandLine() . "\n");
+                    $cmd->run();
                 }
-                $cmd->setCropOffset($offset);
-
-                $this->msg->write($cmd->getCommandLine() . "\n");
-                $cmd->run();
                 $outoutPageIndex++;
 
             }

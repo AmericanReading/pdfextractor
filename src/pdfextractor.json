@@ -1,9 +1,15 @@
 {
-    // Output directory. Override with --target or -o
-    "target": "./",
-    "page-pattern": "%03d.jpg",
+    // Add blank pages at the specified indexed.
+    // Override with --blank
+    // "blank": [2, 4]
+    "blank": [],
 
-    // Format, quality, etc.
+    // Convert to a given colorspace.
+    // Override with --colorspace
+    // For a list of options, see http://www.imagemagick.org/script/command-line-options.php#colorspace
+    // or run "identify -list colorspace"
+    // "colorspace": "RGB"
+    "colorspace": null,
 
     // Source density for ImageMagick commands.
     // Override with --density
@@ -11,8 +17,11 @@
 
     // Resize dimensions as string.
     // Override with --resize
-    //"resize": "1920x1536"
+    // "resize": "1920x1536"
     "resize": null,
+
+    // Output directory. Override with --target or -o
+    "page-pattern": "%03d.jpg",
 
     // Paths to ImageMagick commands.
     "convert": "convert",

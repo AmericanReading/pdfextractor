@@ -28,10 +28,7 @@ class ConvertCommand extends ImageMagickCommand
 
     public function getCommandLine()
     {
-        $cmd = array(
-            $this->configuration->get(self::IM_CONVERT),
-            '-colorspace sRGB'
-        );
+        $cmd = array($this->configuration->get(self::IM_CONVERT));
         $cmd = array_merge($cmd, $this->getCommonArguments());
 
         if (isset($this->cropSize)) {
@@ -42,14 +39,24 @@ class ConvertCommand extends ImageMagickCommand
             $cmd[] = $crop;
         }
 
-        $resize = $this->configuration->get("resize");
-        if ($resize !== null) {
-            $cmd[] = "-resize $resize";
+        $colorspace = $this->configuration->get("colorspace");
+        if ($colorspace !== null) {
+            $cmd[] = "-colorspace $colorspace";
         }
 
         $quality = $this->configuration->get("quality");
         if ($quality !== null) {
             $cmd[] = "-quality $quality";
+        }
+
+        $resize = $this->configuration->get("resize");
+        if ($resize !== null) {
+            $cmd[] = "-resize $resize";
+        }
+
+        $magick = $this->configuration->get("magick");
+        if ($magick !== null) {
+            $cmd[] = $magick;
         }
 
         $cmd[] = '"' . $this->source . '"';
