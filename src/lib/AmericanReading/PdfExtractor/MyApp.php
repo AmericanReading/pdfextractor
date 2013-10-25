@@ -290,14 +290,22 @@ class MyApp extends App implements ConfigInterface
 
         $smallest = $this->pdfInfo->getSmallestPageSize();
 
-        // If this PDF contains spreads and there is a gutter, re-calculate the smallest page.
+        // If there is a gutter, recalculate the smallest page width.
         $gutter = $this->conf->get("gutter", 0);
-        if ($this->pdfInfo->containsSpreads() && $gutter > 0) {
-            foreach ($inputPageSizes as $inputPagesize) {
-                if ($this->pdfInfo->isSpread($inputPagesize)) {
-                    $singlePage = ($inputPagesize->width / 2) - $gutter;
-                    $smallest->width = min($smallest->width, $singlePage);
+        if ($gutter > 0) {
+            if ($this->pdfInfo->containsSpreads()) {
+                // For PDF with spreads, the gutter is only applied to spreads. Ensure that the
+                // smallest page width can accomodate each spread, cut in half, with the gutter
+                // removed.
+                foreach ($inputPageSizes as $inputPagesize) {
+                    if ($this->pdfInfo->isSpread($inputPagesize)) {
+                        $singlePage = ($inputPagesize->width / 2) - $gutter;
+                        $smallest->width = min($smallest->width, $singlePage);
+                    }
                 }
+            } else {
+                // For PDFs without spread, the gutter is removed from each page.
+                $smallest->width -= $gutter;
             }
         }
 
@@ -324,7 +332,7 @@ class MyApp extends App implements ConfigInterface
                 if ($exportAllPages || in_array($outoutPageIndex, $pagesToExport)) {
                     $targetPage = Util::joinPaths($target, sprintf($outputPagePattern, $outoutPageIndex));
                     $cmd = new BlankPageCommand((string) $smallest, $targetPage, $this->conf);
-                    $this->msg->write($cmd->getCommandLine() . "\n");
+                    $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
                     $cmd->run();
                 }
                 $outoutPageIndex++;
@@ -342,7 +350,7 @@ class MyApp extends App implements ConfigInterface
                     $cmd->setCropSize($smallest);
                     $offset->x = 0;
                     $cmd->setCropOffset($offset);
-                    $this->msg->write($cmd->getCommandLine() . "\n");
+                    $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
                     $cmd->run();
                 }
                 $outoutPageIndex++;
@@ -354,7 +362,7 @@ class MyApp extends App implements ConfigInterface
                     $cmd->setCropSize($smallest);
                     $offset->x = $inputPageSize->width - $smallest->width;
                     $cmd->setCropOffset($offset);
-                    $this->msg->write($cmd->getCommandLine() . "\n");
+                    $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
                     $cmd->run();
                 }
                 $outoutPageIndex++;
@@ -366,12 +374,24 @@ class MyApp extends App implements ConfigInterface
                     $targetPage = Util::joinPaths($target, sprintf($outputPagePattern, $outoutPageIndex));
                     $cmd = new ConvertCommand($sourcePage, $targetPage, $this->conf);
                     $cmd->setCropSize($smallest);
-                    // Center the cropped portion within the input page.
-                    if ($inputPageSize->width > $smallest->width) {
-                        $offset->x = ($inputPageSize->width - $smallest->width) / 2;
+
+                    if ($gutter > 0) {
+                        // Shift the offset to remove the gutter.
+                        $recto = ($outoutPageIndex % 2 === 1);
+                        if ($recto) {
+                            $offset->x = $gutter;
+                        } else {
+                            $offset->x = $inputPageSize->width - $smallest->width - $gutter;
+                        }
+                    } else {
+                        // Center the cropped portion within the input page.
+                        if ($inputPageSize->width > $smallest->width) {
+                            $offset->x = ($inputPageSize->width - $smallest->width) / 2;
+                        }
                     }
+
                     $cmd->setCropOffset($offset);
-                    $this->msg->write($cmd->getCommandLine() . "\n");
+                    $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
                     $cmd->run();
                 }
                 $outoutPageIndex++;
