@@ -26,6 +26,10 @@
     // Output directory. Override with --target or -o
     "page-pattern": "%03d.jpg",
 
+    // Number of child process to run simultaneously.
+    // Override with --concurrent
+    "concurrent": 8,
+
     // Paths to ImageMagick commands.
     "convert": "convert",
     "identify": "identify"

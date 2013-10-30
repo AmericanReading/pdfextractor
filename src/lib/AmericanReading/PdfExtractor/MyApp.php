@@ -4,6 +4,7 @@ namespace AmericanReading\PdfExtractor;
 
 use AmericanReading\CliTools\App\App;
 use AmericanReading\CliTools\App\AppException;
+use AmericanReading\CliTools\Command\Command;
 use AmericanReading\CliTools\Configuration\Configuration;
 use AmericanReading\CliTools\Message\Messager;
 use AmericanReading\CliTools\Message\MessagerInterface;
@@ -48,11 +49,14 @@ class MyApp extends App implements ConfigInterface
 
     protected function main($options = null)
     {
+        $timeStart = microtime(true);
         $this->readConfiguration();
         $this->readOptions($options);
         $this->msg->write("PDF Extractor\n", self::VERBOSITY_VERBOSE);
         $this->readPdfInfo();
         $this->outputPages();
+        $timeEnd = microtime(true);
+        $this->msg->write(sprintf("Completed in %s seconds.\n", $timeEnd - $timeStart));
     }
 
     protected function exitWithError($statusCode = 1, $message = null)
@@ -114,6 +118,7 @@ class MyApp extends App implements ConfigInterface
             array(null, 'quality',    Getopt::REQUIRED_ARGUMENT, "Target JPEG qualiy from 1-100 (100 least compressed) Ex: \"--quality=90\""),
             array(null, 'resize',     Getopt::REQUIRED_ARGUMENT, "Target dimensions. Ex: \"--resize=1920x1536\""),
             array(null, 'magick',     Getopt::REQUIRED_ARGUMENT, "Any extra parameted to pass through to the ImageMagick convert command."),
+            array(null, 'concurrent', Getopt::REQUIRED_ARGUMENT, "Number of processes to run simultaneously. Ex: \"--concurrent=6\"."),
             array(null, 'debug',      Getopt::NO_ARGUMENT,       "Show verbose and debug messages."),
             array(null, 'silent',     Getopt::NO_ARGUMENT,       "Do not output messages."),
             array(null, 'version',    Getopt::NO_ARGUMENT,       "Display the version number.")
@@ -235,6 +240,11 @@ class MyApp extends App implements ConfigInterface
         if ($getopt->getOption('magick') !== null) {
             $this->conf->set('magick', $getopt->getOption('magick'));
         }
+
+        // Concurrent
+        if ($getopt->getOption('concurrent') !== null) {
+            $this->conf->set('concurrent', $getopt->getOption('concurrent'));
+        }
     }
 
     /**
@@ -267,7 +277,7 @@ class MyApp extends App implements ConfigInterface
         $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
         $cmd->run();
         $this->pdfInfo = $cmd->getInfo();
-        $this->msg->write("Page Count: " . $this->pdfInfo->getPageCount() . "\n");
+        $this->msg->write("Page Count: " . $this->pdfInfo->getPageCount() . "\n",  self::VERBOSITY_VERBOSE);
         $this->msg->write("Page Sizes:\n", self::VERBOSITY_VERBOSE);
         foreach ($this->pdfInfo->getPageSizes() as $index => $size) {
             $this->msg->write("[$index] $size\n", self::VERBOSITY_VERBOSE);
@@ -332,10 +342,9 @@ class MyApp extends App implements ConfigInterface
 
         $sourcePageCount =  $this->pdfInfo->getPageCount();
 
-        // Create the progress bar.
-        if ($this->msg->getVerbosity() >= self::VERBOSITY_SILENT) {
-            $progressBar = new ProgressBar(0, $sourcePageCount - 1);
-        }
+        // Build a list of commands.
+        // After the list is built, run them.
+        $cmds = array();
 
         for ($i = 0; $i < $sourcePageCount; $i++) {
 
@@ -354,7 +363,7 @@ class MyApp extends App implements ConfigInterface
                     $targetPage = Util::joinPaths($target, sprintf($outputPagePattern, $outoutPageIndex));
                     $cmd = new BlankPageCommand((string) $smallest, $targetPage, $this->conf);
                     $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
-                    $cmd->run();
+                    $cmds[] = $cmd->getCommandLine();
                 }
                 $outoutPageIndex++;
             }
@@ -372,7 +381,7 @@ class MyApp extends App implements ConfigInterface
                     $offset->x = 0;
                     $cmd->setCropOffset($offset);
                     $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
-                    $cmd->run();
+                    $cmds[] = $cmd->getCommandLine();
                 }
                 $outoutPageIndex++;
 
@@ -384,7 +393,7 @@ class MyApp extends App implements ConfigInterface
                     $offset->x = $inputPageSize->width - $smallest->width;
                     $cmd->setCropOffset($offset);
                     $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
-                    $cmd->run();
+                    $cmds[] = $cmd->getCommandLine();
                 }
                 $outoutPageIndex++;
 
@@ -413,15 +422,100 @@ class MyApp extends App implements ConfigInterface
 
                     $cmd->setCropOffset($offset);
                     $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
-                    $cmd->run();
+                    $cmds[] = $cmd->getCommandLine();
                 }
                 $outoutPageIndex++;
 
             }
+        }
 
-            if (isset($progressBar)) {
-                $progressBar->update($i);
+        $concurrent = $this->conf->get("concurrent", 1);
+        if ($concurrent > 1 && function_exists('pcntl_fork')) {
+            // Process control. Run in parallel.
+            $this->outputPagesParallel($cmds, $concurrent);
+        } else {
+            // No process control. Run in series.
+            $this->outputPagesSerial($cmds);
+        }
+
+    }
+
+    private function outputPagesSerial(array $cmds)
+    {
+        // Create the progress bar.
+        if ($this->msg->getVerbosity() >= self::VERBOSITY_SILENT) {
+            $progress = 1;
+            $progressBar = new ProgressBar($progress, count($cmds));
+        }
+
+        foreach ($cmds as $cmdLine) {
+            $cmd = new Command($cmdLine);
+            $cmd->run();
+            if (isset($progressBar, $progress)) {
+                $progressBar->update($progress++);
             }
         }
     }
+
+    private function outputPagesParallel(array $cmds, $concurrent)
+    {
+        // Build an array of runnable objects.
+        $queued = array();
+        foreach ($cmds as $cmd) {
+            $queued[] = new Command($cmd);
+        }
+
+        $running = array();
+        $completed = array();
+
+        // Create the progress bar.
+        if ($this->msg->getVerbosity() >= self::VERBOSITY_SILENT) {
+            $progress = 1;
+            $progressBar = new ProgressBar($progress, count($cmds) - 1);
+        }
+
+
+        // Loop until the queue is emptied.
+        while (count($completed) < count($cmds)) {
+
+            // Start processes until the queue is full.
+            while (count($running) < min($concurrent, count($queued))) {
+
+                // Pop the next command from the queue.
+                // This must be done before forking.
+                $cmd = array_pop($queued);
+                $pid = pcntl_fork();
+
+                if ($pid === -1) {
+                    // Unable to fork.
+                    print "Unable to fork!";
+                    exit(0);
+                } elseif ($pid === 0) {
+                    // Child.
+                    $cmd->run();
+                    exit(0);
+                } else {
+                    // Parent. Add this child's PID to running.
+                    $running[] = $pid;
+                }
+
+            }
+
+            // Wait for a process to finish.
+            $pid = (pcntl_wait($status, WNOHANG OR WUNTRACED) > 0);
+
+            if (($key = array_search($pid, $running)) !== false) {
+                unset($running[$key]);
+                $completed[] = $pid;
+                if (isset($progressBar, $progress)) {
+                    $progressBar->update($progress++);
+                }
+            }
+
+            usleep(1000);
+
+        }
+
+    }
+
 }
