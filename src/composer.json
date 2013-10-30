@@ -1,5 +1,6 @@
 {
     "require": {
+        "guiguiboy/php-cli-progress-bar": "dev-master",
         "ulrichsg/getopt-php": "dev-master"
     },
     "autoload": {

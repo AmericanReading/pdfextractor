@@ -21,13 +21,27 @@ abstract class ImageMagickCommand extends ConfiguredCommand
     }
 
     /**
+     * @throws AppException
      * @return array A list of arguments most ImageMagick commands will use.
      */
     protected function getCommonArguments()
     {
-        $args = array(
-            '-define pdf:use-cropbox=true',
-        );
+        $args = array();
+
+        $box = $this->configuration->get("box");
+        if ($box) {
+            switch ($box) {
+                case 'crop':
+                case 'trim':
+                    $args[] =  "-define pdf:use-${box}box=true";
+                    break;
+                case 'media':
+                    // Default. Do nothing.
+                    break;
+                default:
+                    throw new AppException("Unexpected value for box \"$box\". Must by \"crop\", \"media\", or \"trim\".");
+            }
+        }
 
         $density = $this->configuration->get("density");
         if ($density !== null) {

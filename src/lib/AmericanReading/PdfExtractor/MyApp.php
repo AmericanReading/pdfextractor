@@ -12,6 +12,7 @@ use AmericanReading\PdfExtractor\Command\BlankPageCommand;
 use AmericanReading\PdfExtractor\Command\ConvertCommand;
 use AmericanReading\PdfExtractor\Command\ReadPdfInfoCommand;
 use AmericanReading\PdfExtractor\Data\PdfInfo;
+use ProgressBar\Manager as ProgressBar;
 use Ulrichsg\Getopt;
 use UnexpectedValueException;
 
@@ -106,6 +107,7 @@ class MyApp extends App implements ConfigInterface
             array('t',  'target',     Getopt::REQUIRED_ARGUMENT, "Write image files to a directory at the specified path. (Supercedes --output)"),
             array('p',  'pages',      Getopt::REQUIRED_ARGUMENT, "list of page number or ranges to export. Ex: \"--pages=1,4-6,10\""),
             array(null, 'blank',      Getopt::REQUIRED_ARGUMENT, "List of blank pages to insert. Ex: \"--blank=2,4\""),
+            array(null, 'box',        Getopt::REQUIRED_ARGUMENT, "PDF box model. Allowed values: media, crop, trim. Ex: \"--box=crop\""),
             array(null, 'colorspace', Getopt::REQUIRED_ARGUMENT, "Convert to the specified colorspace. Ex: \"--colorspace=RGB\""),
             array(null, 'density',    Getopt::REQUIRED_ARGUMENT, "Source density for ImageMagick commands. Ex: \"--density=300\""),
             array(null, 'gutter',     Getopt::REQUIRED_ARGUMENT, "Pixels to ignore at the center of spreads. Ex: \"--gutter=75\""),
@@ -199,6 +201,11 @@ class MyApp extends App implements ConfigInterface
             $this->conf->set('blank', explode(',', $getopt->getOption('blank')));
         }
 
+        // Box
+        if ($getopt->getOption('box') !== null) {
+            $this->conf->set('box', $getopt->getOption('box'));
+        }
+
         // Colorspace
         if ($getopt->getOption('colorspace') !== null) {
             $this->conf->set('colorspace', $getopt->getOption('colorspace'));
@@ -260,22 +267,22 @@ class MyApp extends App implements ConfigInterface
         $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
         $cmd->run();
         $this->pdfInfo = $cmd->getInfo();
-        $this->msg->write("Page Count: " . $this->pdfInfo->getPageCount() . "\n", self::VERBOSITY_DEBUG);
-        $this->msg->write("Page Sizes:\n", self::VERBOSITY_DEBUG);
+        $this->msg->write("Page Count: " . $this->pdfInfo->getPageCount() . "\n");
+        $this->msg->write("Page Sizes:\n", self::VERBOSITY_VERBOSE);
         foreach ($this->pdfInfo->getPageSizes() as $index => $size) {
-            $this->msg->write("[$index] $size\n", self::VERBOSITY_DEBUG);
+            $this->msg->write("[$index] $size\n", self::VERBOSITY_VERBOSE);
         }
         if ($this->pdfInfo->isUniform()) {
-            $this->msg->write("All pages are the same dimensions.\n");
+            $this->msg->write("All pages are the same dimensions.\n", self::VERBOSITY_VERBOSE);
         } else {
-            $this->msg->write("Page sizes are not uniform.\n");
+            $this->msg->write("Page sizes are not uniform.\n", self::VERBOSITY_VERBOSE);
         }
-        $this->msg->write("Smallest Page Size: " . $this->pdfInfo->getSmallestPageSize() . "\n");
-        $this->msg->write("Largest Page Size: " . $this->pdfInfo->getLargestPageSize() . "\n");
+        $this->msg->write("Smallest Page Size: " . $this->pdfInfo->getSmallestPageSize() . "\n", self::VERBOSITY_VERBOSE);
+        $this->msg->write("Largest Page Size: " . $this->pdfInfo->getLargestPageSize() . "\n", self::VERBOSITY_VERBOSE);
         if ($this->pdfInfo->containsSpreads()) {
-            $this->msg->write("Spreads.\n");
+            $this->msg->write("Spreads.\n", self::VERBOSITY_VERBOSE);
         } else {
-            $this->msg->write("No spreads.\n");
+            $this->msg->write("No spreads.\n", self::VERBOSITY_VERBOSE);
         }
     }
 
@@ -289,7 +296,7 @@ class MyApp extends App implements ConfigInterface
             }
         }
         $target = realpath($target);
-        $this->msg->write("Writing to $target\n", self::VERBOSITY_VERBOSE);
+        $this->msg->write("Writing to $target\n");
 
         $outputPagePattern = $this->conf->get('page-pattern', '%03d.jpg');
         $outoutPageIndex = 1;
@@ -323,7 +330,14 @@ class MyApp extends App implements ConfigInterface
         $pagesToExport = $this->conf->get('pages');
         $exportAllPages = is_null($pagesToExport);
 
-        for ($i = 0, $u = $this->pdfInfo->getPageCount(); $i < $u; $i++) {
+        $sourcePageCount =  $this->pdfInfo->getPageCount();
+
+        // Create the progress bar.
+        if ($this->msg->getVerbosity() >= self::VERBOSITY_SILENT) {
+            $progressBar = new ProgressBar(0, $sourcePageCount - 1);
+        }
+
+        for ($i = 0; $i < $sourcePageCount; $i++) {
 
             $sourcePage = $source . "[$i]";
             $inputPageSize = $inputPageSizes[$i];
@@ -403,6 +417,10 @@ class MyApp extends App implements ConfigInterface
                 }
                 $outoutPageIndex++;
 
+            }
+
+            if (isset($progressBar)) {
+                $progressBar->update($i);
             }
         }
     }

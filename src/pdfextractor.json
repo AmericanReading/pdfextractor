@@ -4,6 +4,9 @@
     // "blank": [2, 4]
     "blank": [],
 
+    // Box model to use for determining PDF page size. Allowed values: "media", "crop", "trim"
+    "box": "trim",
+
     // Convert to a given colorspace.
     // Override with --colorspace
     // For a list of options, see http://www.imagemagick.org/script/command-line-options.php#colorspace
