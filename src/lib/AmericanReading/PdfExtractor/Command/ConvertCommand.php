@@ -31,6 +31,9 @@ class ConvertCommand extends ImageMagickCommand
         $cmd = array($this->configuration->get(self::IM_CONVERT));
         $cmd = array_merge($cmd, $this->getCommonArguments());
 
+        // Until we add support for anything other than JPEG, all alpha channels should be removed.
+        $cmd[] = "-alpha Remove";
+
         if (isset($this->cropSize)) {
             $crop = "-crop " . $this->cropSize->width . "x" . $this->cropSize->height;
             if (isset($this->cropOffset)) {

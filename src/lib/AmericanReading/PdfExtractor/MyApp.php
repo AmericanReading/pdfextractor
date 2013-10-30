@@ -113,7 +113,8 @@ class MyApp extends App implements ConfigInterface
             array(null, 'resize',     Getopt::REQUIRED_ARGUMENT, "Target dimensions. Ex: \"--resize=1920x1536\""),
             array(null, 'magick',     Getopt::REQUIRED_ARGUMENT, "Any extra parameted to pass through to the ImageMagick convert command."),
             array(null, 'debug',      Getopt::NO_ARGUMENT,       "Show verbose and debug messages."),
-            array(null, 'silent',     Getopt::NO_ARGUMENT,       "Do not output messages.")
+            array(null, 'silent',     Getopt::NO_ARGUMENT,       "Do not output messages."),
+            array(null, 'version',    Getopt::NO_ARGUMENT,       "Display the version number.")
         ));
 
         // Parse.
@@ -126,6 +127,12 @@ class MyApp extends App implements ConfigInterface
         // Help. Show help and exit.
         if ($getopt->getOption('help')) {
             $getopt->showHelp();
+            exit(0);
+        }
+
+        // Version. Show version and exit.
+        if ($getopt->getOption('version')) {
+            $this->msg->write("%s v%s\n%s\n", self::NAME, self::VERSION, self::COPYRIGHT);
             exit(0);
         }
 
