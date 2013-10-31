@@ -9,4 +9,9 @@ $phar = new Phar($buildRoot . "/" . PHAR_NAME,
     FilesystemIterator::CURRENT_AS_FILEINFO | FilesystemIterator::KEY_AS_FILENAME,
     PHAR_NAME);
 $phar->buildFromDirectory($srcRoot);
-$phar->setStub($phar->createDefaultStub("run.php"));
+
+// Create a custom stub to add the shebang
+$stub = $phar->createDefaultStub("run.php");
+$stub = "#!/usr/bin/env php \n" . $stub;
+
+$phar->setStub($stub);

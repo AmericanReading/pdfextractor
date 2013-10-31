@@ -444,8 +444,8 @@ class MyApp extends App implements ConfigInterface
     {
         // Create the progress bar.
         if ($this->msg->getVerbosity() >= self::VERBOSITY_SILENT) {
-            $progress = 1;
-            $progressBar = new ProgressBar($progress, count($cmds));
+            $progress = 0;
+            $progressBar = new ProgressBar(0, count($cmds) - 1);
         }
 
         foreach ($cmds as $cmdLine) {
@@ -470,10 +470,9 @@ class MyApp extends App implements ConfigInterface
 
         // Create the progress bar.
         if ($this->msg->getVerbosity() >= self::VERBOSITY_SILENT) {
-            $progress = 1;
-            $progressBar = new ProgressBar($progress, count($cmds) - 1);
+            $progress = 0;
+            $progressBar = new ProgressBar(0, count($cmds) - 1);
         }
-
 
         // Loop until the queue is emptied.
         while (count($completed) < count($cmds)) {
