@@ -139,7 +139,7 @@ class MyApp extends App implements ConfigInterface
 
         // Version. Show version and exit.
         if ($getopt->getOption('version')) {
-            $this->msg->write("%s v%s\n%s\n", self::NAME, self::VERSION, self::COPYRIGHT);
+            $this->msg->write(sprintf("%s v%s\n%s\n", self::NAME, self::VERSION, self::COPYRIGHT));
             exit(0);
         }
 
