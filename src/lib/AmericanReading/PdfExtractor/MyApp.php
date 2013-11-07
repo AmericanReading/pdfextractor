@@ -53,6 +53,9 @@ class MyApp extends App implements ConfigInterface
         $this->readConfiguration();
         $this->readOptions($options);
         $this->msg->write("PDF Extractor\n", self::VERBOSITY_VERBOSE);
+        if ($this->conf->get('clean', false)) {
+            $this->clean();
+        }
         $this->readPdfInfo();
         $this->outputPages();
         $timeEnd = microtime(true);
@@ -117,8 +120,10 @@ class MyApp extends App implements ConfigInterface
             array(null, 'gutter',     Getopt::REQUIRED_ARGUMENT, "Pixels to ignore at the center of spreads. Ex: \"--gutter=75\""),
             array(null, 'quality',    Getopt::REQUIRED_ARGUMENT, "Target JPEG qualiy from 1-100 (100 least compressed) Ex: \"--quality=90\""),
             array(null, 'resize',     Getopt::REQUIRED_ARGUMENT, "Target dimensions. Ex: \"--resize=1920x1536\""),
+            array(null, 'start',      Getopt::REQUIRED_ARGUMENT, "Set the numbering for the file names. Ex: \"--start=2\"."),
             array(null, 'magick',     Getopt::REQUIRED_ARGUMENT, "Any extra parameted to pass through to the ImageMagick convert command."),
             array(null, 'concurrent', Getopt::REQUIRED_ARGUMENT, "Number of processes to run simultaneously. Ex: \"--concurrent=6\"."),
+            array(null, 'clean',      Getopt::NO_ARGUMENT,       "Delete the contents of the target directory (before outputting)."),
             array(null, 'debug',      Getopt::NO_ARGUMENT,       "Show verbose and debug messages."),
             array(null, 'silent',     Getopt::NO_ARGUMENT,       "Do not output messages."),
             array(null, 'version',    Getopt::NO_ARGUMENT,       "Display the version number.")
@@ -185,6 +190,11 @@ class MyApp extends App implements ConfigInterface
             $this->conf->set('target', $directory);
         }
 
+        // Clean
+        if ($getopt->getOption('clean') !== null) {
+            $this->conf->set('clean', true);
+        }
+
         // Pages
         if ($getopt->getOption('pages') !== null) {
             $pages = array();
@@ -234,6 +244,11 @@ class MyApp extends App implements ConfigInterface
         // Resize
         if ($getopt->getOption('resize') !== null) {
             $this->conf->set('resize', $getopt->getOption('resize'));
+        }
+
+        // Start
+        if ($getopt->getOption('start') !== null) {
+            $this->conf->set('start', $getopt->getOption('start'));
         }
 
         // Magick
@@ -298,7 +313,10 @@ class MyApp extends App implements ConfigInterface
 
     private function outputPages()
     {
+        // Find the full path to the input PDF.
         $source = realpath($this->conf->get('source'));
+
+        // Find the full path to the output directory. Create the directory, if needed.
         $target = $this->conf->get('target');
         if (!is_dir(realpath($target))) {
             if (!mkdir($target, 0777, true)) {
@@ -309,7 +327,7 @@ class MyApp extends App implements ConfigInterface
         $this->msg->write("Writing to $target\n");
 
         $outputPagePattern = $this->conf->get('page-pattern', '%03d.jpg');
-        $outoutPageIndex = 1;
+        $outoutPageIndex = (int) $this->conf->get('start', 1);
         $inputPageSizes = $this->pdfInfo->getPageSizes();
 
         $smallest = $this->pdfInfo->getSmallestPageSize();
@@ -515,6 +533,22 @@ class MyApp extends App implements ConfigInterface
 
         }
 
+    }
+
+    /** Delete all files in the target directory. */
+    private function clean()
+    {
+        $target = realpath($this->conf->get('target'));
+        if (is_dir($target)) {
+            $this->msg->write("Cleaning target directory\n");
+            $files = glob(Util::joinPaths($target, '*'));
+            foreach ($files as $file) {
+                if (is_file($file)) {
+                    $this->msg->write("Deleteing $file\n", self::VERBOSITY_VERBOSE);
+                    unlink($file);
+                }
+            }
+        }
     }
 
 }

@@ -23,6 +23,10 @@
     // "resize": "1920x1536"
     "resize": null,
 
+    // Start numbering pages from this number.
+    // Override with --start
+    "start": 1,
+
     // Output directory. Override with --target or -o
     "page-pattern": "%03d.jpg",
 
