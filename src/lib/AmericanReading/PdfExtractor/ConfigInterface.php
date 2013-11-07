@@ -9,6 +9,9 @@ interface ConfigInterface
     const VERSION = '0.2.0';
     const PHAR_NAME = 'pdfextractor.phar';
     const CONFIGURATION_FILE_NAME = 'pdfextractor.json';
+    const GITHUB_REPOSITORY_OWNER = 'AmericanReading';
+    const GITHUB_REPOSITORY_NAME = 'pdfextractor';
+    const GITHUB_ASSET_NAME = 'pdfextractor.phar';
 
     // Verbosity Levels
     const VERBOSITY_DEBUG = 2;

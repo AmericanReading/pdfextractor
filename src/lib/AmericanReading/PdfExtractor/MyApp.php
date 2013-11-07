@@ -13,7 +13,9 @@ use AmericanReading\Geometry\Size;
 use AmericanReading\PdfExtractor\Command\BlankPageCommand;
 use AmericanReading\PdfExtractor\Command\ConvertCommand;
 use AmericanReading\PdfExtractor\Command\ReadPdfInfoCommand;
+use AmericanReading\PdfExtractor\Components\GitHubRelease;
 use AmericanReading\PdfExtractor\Data\PdfInfo;
+use Phar;
 use ProgressBar\Manager as ProgressBar;
 use Ulrichsg\Getopt;
 use UnexpectedValueException;
@@ -134,6 +136,7 @@ class MyApp extends App implements ConfigInterface
             array(null, 'magick',     Getopt::REQUIRED_ARGUMENT, "Any extra parameted to pass through to the ImageMagick convert command."),
             array(null, 'concurrent', Getopt::REQUIRED_ARGUMENT, "Number of processes to run simultaneously. Ex: \"--concurrent=6\"."),
             array(null, 'clean',      Getopt::NO_ARGUMENT,       "Delete the contents of the target directory (before outputting)."),
+            array(null, 'selfupdate', Getopt::NO_ARGUMENT,       "Update the utility."),
             array(null, 'debug',      Getopt::NO_ARGUMENT,       "Show verbose and debug messages."),
             array(null, 'silent',     Getopt::NO_ARGUMENT,       "Do not output messages."),
             array(null, 'version',    Getopt::NO_ARGUMENT,       "Display the version number.")
@@ -175,6 +178,12 @@ class MyApp extends App implements ConfigInterface
             $this->msg->setVerbosity(self::VERBOSITY_SILENT);
         } elseif ($getopt->getOption('verbose') !== null) {
             $this->msg->setVerbosity(self::VERBOSITY_VERBOSE);
+        }
+
+        // Self update. Check for update and exit.
+        if ($getopt->getOption('selfupdate')) {
+            $this->selfUpdate();
+            exit(0);
         }
 
         // Source
@@ -569,4 +578,35 @@ class MyApp extends App implements ConfigInterface
         }
     }
 
+    private function selfUpdate()
+    {
+        $this->msg->write("Checking for updates...\n");
+        $release = new GitHubRelease(self::GITHUB_REPOSITORY_OWNER, self::GITHUB_REPOSITORY_NAME);
+
+        // Stop now if this is a current version of the app.
+        if (version_compare($release->getVersion(), self::VERSION, '<=')) {
+            $this->msg->write(self::NAME . " version " . self::VERSION  . " is already up to date.\n");
+            exit(0);
+        }
+
+        $this->msg->write("Newer version " . $release->getVersion() . " found.\n");
+
+        // Get a tmp file to download the phar to.
+        $tempFile = tempnam(sys_get_temp_dir(), "phr");
+
+        // Download the file.
+        if (!$release->downloadAsset(self::GITHUB_ASSET_NAME, $tempFile)) {
+            throw new AppException("Download failed.");
+        }
+        $this->msg->write("Download successful.\n");
+
+        // Copty the downloaded file to replace the current app.
+        if (!copy($tempFile, Phar::running(false))) {
+            throw new AppException("Unable to replace existing file. Check your permissions.");
+        }
+        $this->msg->write("Update complete.\n");
+
+        unlink($tempFile);
+        exit(0);
+    }
 }
