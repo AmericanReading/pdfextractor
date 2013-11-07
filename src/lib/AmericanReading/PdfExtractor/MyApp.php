@@ -9,6 +9,7 @@ use AmericanReading\CliTools\Configuration\Configuration;
 use AmericanReading\CliTools\Message\Messager;
 use AmericanReading\CliTools\Message\MessagerInterface;
 use AmericanReading\Geometry\Point;
+use AmericanReading\Geometry\Size;
 use AmericanReading\PdfExtractor\Command\BlankPageCommand;
 use AmericanReading\PdfExtractor\Command\ConvertCommand;
 use AmericanReading\PdfExtractor\Command\ReadPdfInfoCommand;
@@ -31,6 +32,14 @@ class MyApp extends App implements ConfigInterface
     private $stderr;
     /** @var PdfInfo */
     private $pdfInfo;
+    /** @var Size */
+    private $smallestPageSize;
+    /** @var string */
+    private $sourceFilePath;
+    /** @var string */
+    private $targetDirectoryPath;
+    /** @var array Array of string commands to run with page numbers as keys. */
+    private $commands;
 
     public function __construct()
     {
@@ -57,7 +66,8 @@ class MyApp extends App implements ConfigInterface
             $this->clean();
         }
         $this->readPdfInfo();
-        $this->outputPages();
+        $this->buildOutputCommands();
+        $this->runOutputCommands();
         $timeEnd = microtime(true);
         $this->msg->write(sprintf("Completed in %s seconds.\n", $timeEnd - $timeStart));
     }
@@ -311,10 +321,13 @@ class MyApp extends App implements ConfigInterface
         }
     }
 
-    private function outputPages()
+    private function buildOutputCommands()
     {
+        // Build a list of commands. The array will be in the format pageNumber => command.
+        $this->commands = array();
+
         // Find the full path to the input PDF.
-        $source = realpath($this->conf->get('source'));
+        $this->sourceFilePath = realpath($this->conf->get('source'));
 
         // Find the full path to the output directory. Create the directory, if needed.
         $target = $this->conf->get('target');
@@ -323,14 +336,17 @@ class MyApp extends App implements ConfigInterface
                 throw new AppException("Unable to create directory $target");
             }
         }
-        $target = realpath($target);
+        $this->targetDirectoryPath = realpath($target);
         $this->msg->write("Writing to $target\n");
+        unset($target);
 
         $outputPagePattern = $this->conf->get('page-pattern', '%03d.jpg');
         $outoutPageIndex = (int) $this->conf->get('start', 1);
+        $sourcePageCount =  $this->pdfInfo->getPageCount();
         $inputPageSizes = $this->pdfInfo->getPageSizes();
 
-        $smallest = $this->pdfInfo->getSmallestPageSize();
+        // Determine the smallest page size.
+        $this->smallestPageSize = $this->pdfInfo->getSmallestPageSize();
 
         // If there is a gutter, recalculate the smallest page width.
         $gutter = $this->conf->get("gutter", 0);
@@ -342,49 +358,32 @@ class MyApp extends App implements ConfigInterface
                 foreach ($inputPageSizes as $inputPagesize) {
                     if ($this->pdfInfo->isSpread($inputPagesize)) {
                         $singlePage = ($inputPagesize->width / 2) - $gutter;
-                        $smallest->width = min($smallest->width, $singlePage);
+                        $this->smallestPageSize->width = min($this->smallestPageSize->width, $singlePage);
                     }
                 }
             } else {
                 // For PDFs without spread, the gutter is removed from each page.
-                $smallest->width -= $gutter;
+                $this->smallestPageSize->width -= $gutter;
             }
         }
 
-        // List of page indexes at which to insert blank pages.
-        $blanks = $this->conf->get("blank");
+        // Iterate over the source pages.
+        for ($sourcePageIndex = 0; $sourcePageIndex < $sourcePageCount; $sourcePageIndex++) {
 
-        // Find the list of pages to export.
-        $pagesToExport = $this->conf->get('pages');
-        $exportAllPages = is_null($pagesToExport);
+            // For ImageMagick, the source page is the source file name with the index appended
+            // inside of brackets, (e.g., mybook.pdf[0]).
+            $sourcePage = $this->sourceFilePath . "[$sourcePageIndex]";
 
-        $sourcePageCount =  $this->pdfInfo->getPageCount();
-
-        // Build a list of commands.
-        // After the list is built, run them.
-        $cmds = array();
-
-        for ($i = 0; $i < $sourcePageCount; $i++) {
-
-            $sourcePage = $source . "[$i]";
-            $inputPageSize = $inputPageSizes[$i];
+            $inputPageSize = $inputPageSizes[$sourcePageIndex];
 
             // Center vertical. Offset x will be determined later.
             $offset = new Point(0,0);
-            if ($inputPageSize->height > $smallest->height) {
-                $offset->y = ($inputPageSize->height - $smallest->height) / 2;
+            if ($inputPageSize->height > $this->smallestPageSize->height) {
+                $offset->y = ($inputPageSize->height - $this->smallestPageSize->height) / 2;
             }
 
             // Insert blank page.
-            if (in_array($outoutPageIndex, $blanks)) {
-                if ($exportAllPages || in_array($outoutPageIndex, $pagesToExport)) {
-                    $targetPage = Util::joinPaths($target, sprintf($outputPagePattern, $outoutPageIndex));
-                    $cmd = new BlankPageCommand((string) $smallest, $targetPage, $this->conf);
-                    $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
-                    $cmds[] = $cmd->getCommandLine();
-                }
-                $outoutPageIndex++;
-            }
+            $this->buildBlankPageCommands($outoutPageIndex);
 
             // Test if this input page is a spread containing two pages.
             if ($this->pdfInfo->isSpread($inputPageSize)) {
@@ -392,81 +391,100 @@ class MyApp extends App implements ConfigInterface
                 // Spread
 
                 // Left Page
-                if ($exportAllPages || in_array($outoutPageIndex, $pagesToExport)) {
-                    $targetPage = Util::joinPaths($target, sprintf($outputPagePattern, $outoutPageIndex));
-                    $cmd = new ConvertCommand($sourcePage, $targetPage, $this->conf);
-                    $cmd->setCropSize($smallest);
-                    $offset->x = 0;
-                    $cmd->setCropOffset($offset);
-                    $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
-                    $cmds[] = $cmd->getCommandLine();
-                }
+                $targetPage = Util::joinPaths($this->targetDirectoryPath, sprintf($outputPagePattern, $outoutPageIndex));
+                $cmd = new ConvertCommand($sourcePage, $targetPage, $this->conf);
+                $cmd->setCropSize($this->smallestPageSize);
+                $offset->x = 0;
+                $cmd->setCropOffset($offset);
+                $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
+                $this->commands[$outoutPageIndex] = $cmd->getCommandLine();
                 $outoutPageIndex++;
 
                 // Right Page
-                if ($exportAllPages || in_array($outoutPageIndex, $pagesToExport)) {
-                    $targetPage = Util::joinPaths($target, sprintf($outputPagePattern, $outoutPageIndex));
-                    $cmd = new ConvertCommand($sourcePage, $targetPage, $this->conf);
-                    $cmd->setCropSize($smallest);
-                    $offset->x = $inputPageSize->width - $smallest->width;
-                    $cmd->setCropOffset($offset);
-                    $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
-                    $cmds[] = $cmd->getCommandLine();
-                }
+                $targetPage = Util::joinPaths($this->targetDirectoryPath, sprintf($outputPagePattern, $outoutPageIndex));
+                $cmd = new ConvertCommand($sourcePage, $targetPage, $this->conf);
+                $cmd->setCropSize($this->smallestPageSize);
+                $offset->x = $inputPageSize->width - $this->smallestPageSize->width;
+                $cmd->setCropOffset($offset);
+                $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
+                $this->commands[$outoutPageIndex] = $cmd->getCommandLine();
                 $outoutPageIndex++;
 
             } else {
 
                 // Single Page
-                if ($exportAllPages || in_array($outoutPageIndex, $pagesToExport)) {
-                    $targetPage = Util::joinPaths($target, sprintf($outputPagePattern, $outoutPageIndex));
-                    $cmd = new ConvertCommand($sourcePage, $targetPage, $this->conf);
-                    $cmd->setCropSize($smallest);
+                $targetPage = Util::joinPaths($this->targetDirectoryPath, sprintf($outputPagePattern, $outoutPageIndex));
+                $cmd = new ConvertCommand($sourcePage, $targetPage, $this->conf);
+                $cmd->setCropSize($this->smallestPageSize);
 
-                    if ($gutter > 0) {
-                        // Shift the offset to remove the gutter.
-                        $recto = ($outoutPageIndex % 2 === 1);
-                        if ($recto) {
-                            $offset->x = $gutter;
-                        } else {
-                            $offset->x = $inputPageSize->width - $smallest->width - $gutter;
-                        }
+                if ($gutter > 0) {
+                    // Shift the offset to remove the gutter.
+                    $recto = ($outoutPageIndex % 2 === 1);
+                    if ($recto) {
+                        $offset->x = $gutter;
                     } else {
-                        // Center the cropped portion within the input page.
-                        if ($inputPageSize->width > $smallest->width) {
-                            $offset->x = ($inputPageSize->width - $smallest->width) / 2;
-                        }
+                        $offset->x = $inputPageSize->width - $this->smallestPageSize->width - $gutter;
                     }
-
-                    $cmd->setCropOffset($offset);
-                    $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
-                    $cmds[] = $cmd->getCommandLine();
+                } else {
+                    // Center the cropped portion within the input page.
+                    if ($inputPageSize->width > $this->smallestPageSize->width) {
+                        $offset->x = ($inputPageSize->width - $this->smallestPageSize->width) / 2;
+                    }
                 }
+
+                $cmd->setCropOffset($offset);
+                $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
+                $this->commands[$outoutPageIndex] = $cmd->getCommandLine();
                 $outoutPageIndex++;
 
             }
         }
 
+        // Remove commands if the user only wants to output select pages.
+        $pagesToExport = $this->conf->get('pages');
+        if (is_array($pagesToExport)) {
+            foreach (array_keys($this->commands) as $pageNumber) {
+                if (!in_array($pageNumber, $pagesToExport)) {
+                    unset($this->commands[$pageNumber]);
+                }
+            }
+        }
+    }
+
+    private function buildBlankPageCommands(&$outoutPageIndex)
+    {
+        $blanks = $this->conf->get('blank', array());
+        $outputPagePattern = $this->conf->get('page-pattern', '%03d.jpg');
+        while (in_array($outoutPageIndex, $blanks)) {
+            $targetPage = Util::joinPaths($this->targetDirectoryPath, sprintf($outputPagePattern, $outoutPageIndex));
+            $cmd = new BlankPageCommand((string) $this->smallestPageSize, $targetPage, $this->conf);
+            $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
+            $this->commands[$outoutPageIndex] =  $cmd->getCommandLine();
+            $outoutPageIndex++;
+        }
+    }
+
+    private function runOutputCommands()
+    {
         $concurrent = $this->conf->get("concurrent", 1);
         if ($concurrent > 1 && function_exists('pcntl_fork')) {
             // Process control. Run in parallel.
-            $this->outputPagesParallel($cmds, $concurrent);
+            $this->runOutputCommandsParallel($concurrent);
         } else {
             // No process control. Run in series.
-            $this->outputPagesSerial($cmds);
+            $this->runOutputCommandsSerial();
         }
-
     }
 
-    private function outputPagesSerial(array $cmds)
+    private function runOutputCommandsSerial()
     {
         // Create the progress bar.
         if ($this->msg->getVerbosity() >= self::VERBOSITY_SILENT) {
             $progress = 0;
-            $progressBar = new ProgressBar(0, count($cmds) - 1);
+            $progressBar = new ProgressBar(0, count($this->commands) - 1);
         }
 
-        foreach ($cmds as $cmdLine) {
+        foreach ($this->commands as $cmdLine) {
             $cmd = new Command($cmdLine);
             $cmd->run();
             if (isset($progressBar, $progress)) {
@@ -475,11 +493,11 @@ class MyApp extends App implements ConfigInterface
         }
     }
 
-    private function outputPagesParallel(array $cmds, $concurrent)
+    private function runOutputCommandsParallel($concurrent)
     {
         // Build an array of runnable objects.
         $queued = array();
-        foreach ($cmds as $cmd) {
+        foreach ($this->commands as $cmd) {
             $queued[] = new Command($cmd);
         }
 
@@ -489,11 +507,11 @@ class MyApp extends App implements ConfigInterface
         // Create the progress bar.
         if ($this->msg->getVerbosity() >= self::VERBOSITY_SILENT) {
             $progress = 0;
-            $progressBar = new ProgressBar(0, count($cmds) - 1);
+            $progressBar = new ProgressBar(0, count($this->commands) - 1);
         }
 
         // Loop until the queue is emptied.
-        while (count($completed) < count($cmds)) {
+        while (count($completed) < count($this->commands)) {
 
             // Start processes until the queue is full.
             while (count($running) < min($concurrent, count($queued))) {
@@ -505,7 +523,7 @@ class MyApp extends App implements ConfigInterface
 
                 if ($pid === -1) {
                     // Unable to fork.
-                    print "Unable to fork!";
+                    $this->err->write("Unable to fork!");
                     exit(0);
                 } elseif ($pid === 0) {
                     // Child.
