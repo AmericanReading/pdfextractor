@@ -129,6 +129,7 @@ class MyApp extends App implements ConfigInterface
             array(null, 'box',        Getopt::REQUIRED_ARGUMENT, "PDF box model. Allowed values: media, crop, trim. Ex: \"--box=crop\""),
             array(null, 'colorspace', Getopt::REQUIRED_ARGUMENT, "Convert to the specified colorspace. Ex: \"--colorspace=RGB\""),
             array(null, 'density',    Getopt::REQUIRED_ARGUMENT, "Source density for ImageMagick commands. Ex: \"--density=300\""),
+            array(null, 'force-size', Getopt::REQUIRED_ARGUMENT, "Override the smallest page size with these dimensions. Ex: \"--force-size=576x576\""),
             array(null, 'gutter',     Getopt::REQUIRED_ARGUMENT, "Pixels to ignore at the center of spreads. Ex: \"--gutter=75\""),
             array(null, 'quality',    Getopt::REQUIRED_ARGUMENT, "Target JPEG qualiy from 1-100 (100 least compressed) Ex: \"--quality=90\""),
             array(null, 'resize',     Getopt::REQUIRED_ARGUMENT, "Target dimensions. Ex: \"--resize=1920x1536\""),
@@ -248,6 +249,11 @@ class MyApp extends App implements ConfigInterface
         // Density
         if ($getopt->getOption('density') !== null) {
             $this->conf->set('density', $getopt->getOption('density'));
+        }
+
+        // Force Size
+        if ($getopt->getOption('force-size') !== null) {
+            $this->conf->set('force-size', $getopt->getOption('force-size'));
         }
 
         // Gutter
@@ -374,6 +380,16 @@ class MyApp extends App implements ConfigInterface
                 // For PDFs without spread, the gutter is removed from each page.
                 $this->smallestPageSize->width -= $gutter;
             }
+        }
+
+        // Override the smallest page size if there is an option set.
+        $smallestSizeOverride = $this->conf->get('force-size');
+        if (is_string($smallestSizeOverride)) {
+            $smallestSizeOverride = Size::initWithString($smallestSizeOverride);
+            $this->msg->write(sprintf("Overriding smallest page size of %s with %s\n",
+                $this->smallestPageSize,
+                $smallestSizeOverride), self::VERBOSITY_VERBOSE);
+            $this->smallestPageSize = $smallestSizeOverride;
         }
 
         // Iterate over the source pages.
