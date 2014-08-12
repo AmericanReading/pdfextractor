@@ -126,6 +126,7 @@ class MyApp extends App implements ConfigInterface
             array('t',  'target',     Getopt::REQUIRED_ARGUMENT, "Write image files to a directory at the specified path. (Supercedes --output)"),
             array('p',  'pages',      Getopt::REQUIRED_ARGUMENT, "list of page number or ranges to export. Ex: \"--pages=1,4-6,10\""),
             array(null, 'blank',      Getopt::REQUIRED_ARGUMENT, "List of blank pages to insert. Ex: \"--blank=2,4\""),
+            array(null, 'skip',       Getopt::REQUIRED_ARGUMENT, "List of 0-based page indexes from the source PDF to skip. Ex: \"--skip-2,3\""),
             array(null, 'box',        Getopt::REQUIRED_ARGUMENT, "PDF box model. Allowed values: media, crop, trim. Ex: \"--box=crop\""),
             array(null, 'colorspace', Getopt::REQUIRED_ARGUMENT, "Convert to the specified colorspace. Ex: \"--colorspace=RGB\""),
             array(null, 'density',    Getopt::REQUIRED_ARGUMENT, "Source density for ImageMagick commands. Ex: \"--density=300\""),
@@ -230,6 +231,22 @@ class MyApp extends App implements ConfigInterface
             }
             $pages = array_unique($pages, SORT_NUMERIC);
             $this->conf->set('pages', $pages);
+        }
+
+        // Skip
+        if ($getopt->getOption('skip') !== null) {
+            $pages = array();
+            $items = explode(',', $getopt->getOption('skip'));
+            foreach ($items as $item) {
+                if (is_numeric($item)) {
+                    $pages[] = $item;
+                } elseif (substr_count($item, '-') === 1) {
+                    list($lower, $upper) = explode('-', $item);
+                    $pages = array_merge($pages, range($lower, $upper));
+                }
+            }
+            $pages = array_unique($pages, SORT_NUMERIC);
+            $this->conf->set('skip', $pages);
         }
 
         // Blank
@@ -411,8 +428,15 @@ class MyApp extends App implements ConfigInterface
             }
         }
 
+        // Read the source page indexes to skip.
+        $skip =  $this->conf->get("skip", array());
+
         // Iterate over the source pages.
         for ($sourcePageIndex = 0; $sourcePageIndex < $sourcePageCount; $sourcePageIndex++) {
+
+            if (in_array($sourcePageIndex, $skip)) {
+                continue;
+            }
 
             // For ImageMagick, the source page is the source file name with the index appended
             // inside of brackets, (e.g., mybook.pdf[0]).

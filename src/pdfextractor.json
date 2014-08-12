@@ -28,6 +28,10 @@
     // "resize": "1920x1536"
     "resize": null,
 
+    // Skip these 0-based page indexes from the source PDF.
+    // Override with --skip
+    "skip": [],
+
     // Start numbering pages from this number.
     // Override with --start
     "start": 1,
