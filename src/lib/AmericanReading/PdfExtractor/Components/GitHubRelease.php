@@ -26,7 +26,8 @@ class GitHubRelease
             CURLOPT_URL => sprintf(self::RELEASES_URI_PATTERN, $this->owner, $this->repository),
             CURLOPT_HEADER => 0,
             CURLOPT_RETURNTRANSFER => 1,
-            CURLOPT_HTTPGET => 1
+            CURLOPT_HTTPGET => 1,
+            CURLOPT_HTTPHEADER => array("User-Agent: cURL")
         ));
 
         // Make the cURL request.
