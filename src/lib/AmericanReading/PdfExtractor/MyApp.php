@@ -35,7 +35,7 @@ class MyApp extends App implements ConfigInterface
     /** @var PdfInfo */
     private $pdfInfo;
     /** @var Size */
-    private $smallestPageSize;
+    private $normalizedPageSize;
     /** @var string */
     private $sourceFilePath;
     /** @var string */
@@ -129,11 +129,12 @@ class MyApp extends App implements ConfigInterface
             array(null, 'box',        Getopt::REQUIRED_ARGUMENT, "PDF box model. Allowed values: media, crop, trim. Ex: \"--box=crop\""),
             array(null, 'colorspace', Getopt::REQUIRED_ARGUMENT, "Convert to the specified colorspace. Ex: \"--colorspace=RGB\""),
             array(null, 'density',    Getopt::REQUIRED_ARGUMENT, "Source density for ImageMagick commands. Ex: \"--density=300\""),
-            array(null, 'force-size', Getopt::REQUIRED_ARGUMENT, "Override the smallest page size with these dimensions. Ex: \"--force-size=576x576\""),
             array(null, 'gutter',     Getopt::REQUIRED_ARGUMENT, "Pixels to ignore at the center of spreads. Ex: \"--gutter=75\""),
+            array(null, 'normalize',  Getopt::REQUIRED_ARGUMENT, "Determine how to normalize the page size. May be [smallest], s, largest, l, or specific pixel dimensions (e.g., 3600x2400)."),
             array(null, 'quality',    Getopt::REQUIRED_ARGUMENT, "Target JPEG qualiy from 1-100 (100 least compressed) Ex: \"--quality=90\""),
             array(null, 'resize',     Getopt::REQUIRED_ARGUMENT, "Target dimensions. Ex: \"--resize=1920x1536\""),
             array(null, 'start',      Getopt::REQUIRED_ARGUMENT, "Set the numbering for the file names. Ex: \"--start=2\"."),
+            array(null, 'valign',     Getopt::REQUIRED_ARGUMENT, "Determine how to extract pages when the normlized height it taller than the real height. Allowed values: top, [middle], bottom"),
             array(null, 'magick',     Getopt::REQUIRED_ARGUMENT, "Any extra parameted to pass through to the ImageMagick convert command."),
             array(null, 'concurrent', Getopt::REQUIRED_ARGUMENT, "Number of processes to run simultaneously. Ex: \"--concurrent=6\"."),
             array(null, 'clean',      Getopt::NO_ARGUMENT,       "Delete the contents of the target directory (before outputting)."),
@@ -251,9 +252,9 @@ class MyApp extends App implements ConfigInterface
             $this->conf->set('density', $getopt->getOption('density'));
         }
 
-        // Force Size
-        if ($getopt->getOption('force-size') !== null) {
-            $this->conf->set('force-size', $getopt->getOption('force-size'));
+        // Normalize
+        if ($getopt->getOption('normalize') !== null) {
+            $this->conf->set('normalize', $getopt->getOption('normalize'));
         }
 
         // Gutter
@@ -269,6 +270,11 @@ class MyApp extends App implements ConfigInterface
         // Resize
         if ($getopt->getOption('resize') !== null) {
             $this->conf->set('resize', $getopt->getOption('resize'));
+        }
+
+        // Vertical Alignment
+        if ($getopt->getOption('valign') !== null) {
+            $this->conf->set('valign', $getopt->getOption('valign'));
         }
 
         // Start
@@ -361,35 +367,48 @@ class MyApp extends App implements ConfigInterface
         $inputPageSizes = $this->pdfInfo->getPageSizes();
 
         // Determine the smallest page size.
-        $this->smallestPageSize = $this->pdfInfo->getSmallestPageSize();
+        $normalizeSize = $this->conf->get('normalize');
+        switch ($normalizeSize) {
+            case 'smallest':
+            case 's':
+                $this->normalizedPageSize = $this->pdfInfo->getSmallestPageSize();
+                $this->msg->write(sprintf("Normlizing on smallest page size %s\n", $this->normalizedPageSize),
+                    self::VERBOSITY_VERBOSE);
+                break;
+            case 'largest':
+            case 'l':
+                $this->normalizedPageSize = $this->pdfInfo->getLargestPageSize();
+                $this->msg->write(sprintf("Normlizing on largest page size %s\n", $this->normalizedPageSize),
+                    self::VERBOSITY_VERBOSE);
+                break;
+            default:
+                if (is_string($normalizeSize)) {
+                    $size = Size::initWithString($normalizeSize);
+                    $this->msg->write(sprintf("Normlizing on specified page size %s\n", $this->normalizedPageSize),
+                        self::VERBOSITY_VERBOSE);
+                    $this->normalizedPageSize = $size;
+                } else {
+                    throw new AppException('Unable to parse "--normalize" option.');
+                }
+        }
 
         // If there is a gutter, recalculate the smallest page width.
         $gutter = $this->conf->get("gutter", 0);
         if ($gutter > 0) {
             if ($this->pdfInfo->containsSpreads()) {
                 // For PDF with spreads, the gutter is only applied to spreads. Ensure that the
-                // smallest page width can accomodate each spread, cut in half, with the gutter
+                // normalized page width can accomodate each spread, cut in half, with the gutter
                 // removed.
                 foreach ($inputPageSizes as $inputPagesize) {
                     if ($this->pdfInfo->isSpread($inputPagesize)) {
                         $singlePage = ($inputPagesize->width / 2) - $gutter;
-                        $this->smallestPageSize->width = min($this->smallestPageSize->width, $singlePage);
+                        $this->normalizedPageSize->width = min($this->normalizedPageSize->width, $singlePage);
                     }
                 }
             } else {
                 // For PDFs without spread, the gutter is removed from each page.
-                $this->smallestPageSize->width -= $gutter;
+                $this->normalizedPageSize->width -= $gutter;
             }
-        }
-
-        // Override the smallest page size if there is an option set.
-        $smallestSizeOverride = $this->conf->get('force-size');
-        if (is_string($smallestSizeOverride)) {
-            $smallestSizeOverride = Size::initWithString($smallestSizeOverride);
-            $this->msg->write(sprintf("Overriding smallest page size of %s with %s\n",
-                $this->smallestPageSize,
-                $smallestSizeOverride), self::VERBOSITY_VERBOSE);
-            $this->smallestPageSize = $smallestSizeOverride;
         }
 
         // Iterate over the source pages.
@@ -401,10 +420,36 @@ class MyApp extends App implements ConfigInterface
 
             $inputPageSize = $inputPageSizes[$sourcePageIndex];
 
-            // Center vertical. Offset x will be determined later.
+            // Ensure the crop size fits within the image.
+            // Reduce is with constrained proportions if it is too large.
+            $normalSize = Size::initWithSize($this->normalizedPageSize);
+            if ($normalSize->width > $inputPageSize->width) {
+                $normalRatio = $normalSize->width / $normalSize->height;
+                $normalSize->width = $inputPageSize->width;
+                $normalSize->height = $inputPageSize->width / $normalRatio;
+            }
+            if ($normalSize->height > $inputPageSize->height) {
+                $normalRatio = $normalSize->width / $normalSize->height;
+                $normalSize->width = $inputPageSize->height * $normalRatio ;
+                $normalSize->height = $inputPageSize->height;
+            }
+
+            // Determine the vertical offset.
             $offset = new Point(0,0);
-            if ($inputPageSize->height > $this->smallestPageSize->height) {
-                $offset->y = ($inputPageSize->height - $this->smallestPageSize->height) / 2;
+            if ($inputPageSize->height > $normalSize->height) {
+                switch ($this->conf->get('valign')) {
+                    case 'top':
+                        $offset->y = 0;
+                        break;
+                    case 'bottom':
+                        $offset->y = $inputPageSize->height - $normalSize->height;
+                        break;
+                    case 'middle':
+                        $offset->y = ($inputPageSize->height - $normalSize->height) / 2;
+                        break;
+                    default:
+                        throw new AppException('Unable to parse value for option "valign". Allowed values are "top", "middle", and "bottom"');
+                }
             }
 
             // Insert blank page.
@@ -418,7 +463,7 @@ class MyApp extends App implements ConfigInterface
                 // Left Page
                 $targetPage = Util::joinPaths($this->targetDirectoryPath, sprintf($outputPagePattern, $outoutPageIndex));
                 $cmd = new ConvertCommand($sourcePage, $targetPage, $this->conf);
-                $cmd->setCropSize($this->smallestPageSize);
+                $cmd->setCropSize($normalSize);
                 $offset->x = 0;
                 $cmd->setCropOffset($offset);
                 $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
@@ -428,8 +473,8 @@ class MyApp extends App implements ConfigInterface
                 // Right Page
                 $targetPage = Util::joinPaths($this->targetDirectoryPath, sprintf($outputPagePattern, $outoutPageIndex));
                 $cmd = new ConvertCommand($sourcePage, $targetPage, $this->conf);
-                $cmd->setCropSize($this->smallestPageSize);
-                $offset->x = $inputPageSize->width - $this->smallestPageSize->width;
+                $cmd->setCropSize($normalSize);
+                $offset->x = $inputPageSize->width - $normalSize->width;
                 $cmd->setCropOffset($offset);
                 $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
                 $this->commands[$outoutPageIndex] = $cmd->getCommandLine();
@@ -440,7 +485,6 @@ class MyApp extends App implements ConfigInterface
                 // Single Page
                 $targetPage = Util::joinPaths($this->targetDirectoryPath, sprintf($outputPagePattern, $outoutPageIndex));
                 $cmd = new ConvertCommand($sourcePage, $targetPage, $this->conf);
-                $cmd->setCropSize($this->smallestPageSize);
 
                 if ($gutter > 0) {
                     // Shift the offset to remove the gutter.
@@ -448,15 +492,16 @@ class MyApp extends App implements ConfigInterface
                     if ($recto) {
                         $offset->x = $gutter;
                     } else {
-                        $offset->x = $inputPageSize->width - $this->smallestPageSize->width - $gutter;
+                        $offset->x = $inputPageSize->width - $normalSize->width - $gutter;
                     }
                 } else {
                     // Center the cropped portion within the input page.
-                    if ($inputPageSize->width > $this->smallestPageSize->width) {
-                        $offset->x = ($inputPageSize->width - $this->smallestPageSize->width) / 2;
+                    if ($inputPageSize->width > $normalSize->width) {
+                        $offset->x = ($inputPageSize->width - $normalSize->width) / 2;
                     }
                 }
 
+                $cmd->setCropSize($normalSize);
                 $cmd->setCropOffset($offset);
                 $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
                 $this->commands[$outoutPageIndex] = $cmd->getCommandLine();
@@ -482,7 +527,7 @@ class MyApp extends App implements ConfigInterface
         $outputPagePattern = $this->conf->get('page-pattern', '%03d.jpg');
         while (in_array($outoutPageIndex, $blanks)) {
             $targetPage = Util::joinPaths($this->targetDirectoryPath, sprintf($outputPagePattern, $outoutPageIndex));
-            $cmd = new BlankPageCommand((string) $this->smallestPageSize, $targetPage, $this->conf);
+            $cmd = new BlankPageCommand((string) $this->normalizedPageSize, $targetPage, $this->conf);
             $this->msg->write($cmd->getCommandLine() . "\n", self::VERBOSITY_DEBUG);
             $this->commands[$outoutPageIndex] =  $cmd->getCommandLine();
             $outoutPageIndex++;

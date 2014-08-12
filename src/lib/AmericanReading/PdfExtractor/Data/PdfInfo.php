@@ -71,8 +71,6 @@ class PdfInfo
                 $height = min($height, $this->pageSizes[$i]->height);
             }
             $this->smallestPageSize = new Size($width, $height);
-
-
         }
         return $this->smallestPageSize;
     }

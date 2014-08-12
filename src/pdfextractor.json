@@ -18,6 +18,11 @@
     // Override with --density
     "density": null,
 
+    // Determine how to normalize the page size.
+    // Override with --normalize
+    // Allowed values are smallest, s, largest, l, or a pixels dimensions (e.g., 3600x2400)
+    "normalize": "smallest",
+
     // Resize dimensions as string.
     // Override with --resize
     // "resize": "1920x1536"
@@ -26,6 +31,11 @@
     // Start numbering pages from this number.
     // Override with --start
     "start": 1,
+
+    // Determine how to extract pages when the normlized height it taller than the real height.
+    // Override with --valign
+    // Allowed values: top, [middle], bottom
+    "valign": "middle",
 
     // Output directory. Override with --target or -o
     "page-pattern": "%03d.jpg",

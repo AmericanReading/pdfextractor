@@ -35,6 +35,11 @@ class Size
         return new self($arr['width'], $arr['height']);
     }
 
+    public static function initWithSize(Size $size)
+    {
+        return new self($size->width, $size->height);
+    }
+
     public function __toString()
     {
         return $this->width . 'x' . $this->height;
