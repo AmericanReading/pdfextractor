@@ -125,8 +125,8 @@ class MyApp extends App implements ConfigInterface
             array('o',  'output',     Getopt::OPTIONAL_ARGUMENT, "Write image files to a directory with the same name as the source PDF base name. If an optional path is provded, this directory will be inside the provided path."),
             array('t',  'target',     Getopt::REQUIRED_ARGUMENT, "Write image files to a directory at the specified path. (Supercedes --output)"),
             array('p',  'pages',      Getopt::REQUIRED_ARGUMENT, "list of 1-based page number or ranges to export. Ex: \"--pages=1,4-6,10\""),
-            array(null, 'blank',      Getopt::REQUIRED_ARGUMENT, "List of 1-based blank pages to insert. Ex: \"--blank=2,4\" Use negative numbers to indicate pages from the end."),
-            array(null, 'skip',       Getopt::REQUIRED_ARGUMENT, "List of 0-based page indexes from the source PDF to skip. Ex: \"--skip-2,3\""),
+            array(null, 'blank',      Getopt::REQUIRED_ARGUMENT, "List of 1-based blank pages to insert. Ex: \"--blank=2,4\". Use negative numbers to indicate pages from the end."),
+            array(null, 'skip',       Getopt::REQUIRED_ARGUMENT, "List of 0-based page indexes from the source PDF to skip. Ex: \"--skip-2,3\". Use negative numbers to indicate pages from the end."),
             array(null, 'box',        Getopt::REQUIRED_ARGUMENT, "PDF box model. Allowed values: media, crop, trim. Ex: \"--box=crop\""),
             array(null, 'colorspace', Getopt::REQUIRED_ARGUMENT, "Convert to the specified colorspace. Ex: \"--colorspace=RGB\""),
             array(null, 'density',    Getopt::REQUIRED_ARGUMENT, "Source density for ImageMagick commands. Ex: \"--density=300\""),
@@ -438,6 +438,14 @@ class MyApp extends App implements ConfigInterface
 
         // Read the source page indexes to skip.
         $skip =  $this->conf->get("skip", array());
+        // Normlize page from end based on the PDF page count.
+        $skip = array_map(function ($page) use ($sourcePageCount) {
+                if ($page < 0) {
+                    return $sourcePageCount + $page;
+                }
+                return $page;
+            }, $skip);
+        $skip = array_unique($skip);
 
         // Iterate over the source pages.
         for ($sourcePageIndex = 0; $sourcePageIndex < $sourcePageCount; $sourcePageIndex++) {
