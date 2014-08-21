@@ -124,8 +124,8 @@ class MyApp extends App implements ConfigInterface
             array('i',  'source',     Getopt::REQUIRED_ARGUMENT, "Path to the PDF to process."),
             array('o',  'output',     Getopt::OPTIONAL_ARGUMENT, "Write image files to a directory with the same name as the source PDF base name. If an optional path is provded, this directory will be inside the provided path."),
             array('t',  'target',     Getopt::REQUIRED_ARGUMENT, "Write image files to a directory at the specified path. (Supercedes --output)"),
-            array('p',  'pages',      Getopt::REQUIRED_ARGUMENT, "list of page number or ranges to export. Ex: \"--pages=1,4-6,10\""),
-            array(null, 'blank',      Getopt::REQUIRED_ARGUMENT, "List of blank pages to insert. Ex: \"--blank=2,4\""),
+            array('p',  'pages',      Getopt::REQUIRED_ARGUMENT, "list of 1-based page number or ranges to export. Ex: \"--pages=1,4-6,10\""),
+            array(null, 'blank',      Getopt::REQUIRED_ARGUMENT, "List of 1-based blank pages to insert. Ex: \"--blank=2,4\" Use negative numbers to indicate pages from the end."),
             array(null, 'skip',       Getopt::REQUIRED_ARGUMENT, "List of 0-based page indexes from the source PDF to skip. Ex: \"--skip-2,3\""),
             array(null, 'box',        Getopt::REQUIRED_ARGUMENT, "PDF box model. Allowed values: media, crop, trim. Ex: \"--box=crop\""),
             array(null, 'colorspace', Getopt::REQUIRED_ARGUMENT, "Convert to the specified colorspace. Ex: \"--colorspace=RGB\""),
@@ -308,6 +308,14 @@ class MyApp extends App implements ConfigInterface
         if ($getopt->getOption('concurrent') !== null) {
             $this->conf->set('concurrent', $getopt->getOption('concurrent'));
         }
+
+        // Additional validation done after command line options are merged.
+
+        // Ensure blanks contains unique integers.
+        $blanks = $this->conf->get("blank");
+        $blanks = array_map("intval", $blanks);
+        $blanks = array_unique($blanks);
+        $this->conf->set("blank", $blanks);
     }
 
     /**
@@ -543,6 +551,31 @@ class MyApp extends App implements ConfigInterface
                 }
             }
         }
+
+        // Check if the user wants to insert blank pages from the end of the document.
+        // If so, convert the from end numbers (negatives) to from fron numbers (positive) and re-run this method.
+
+        // Read the blanks pages.
+        $blanks = $this->conf->get("blank", array());
+
+
+        // Normalize the blanks.
+        // This can't be done until after the first pass because the total number of pages is undefined until now.
+        $updated = array_map(function ($page) use ($outoutPageIndex) {
+                if ($page < 0) {
+                    return $outoutPageIndex + $page;
+                }
+                return $page;
+            }, $blanks);
+        $updated = array_unique($updated);
+
+        // Update the configuration and rerun, only if the configuration is different (there were pages from the end.)
+        if (count($blanks) !== count($updated) || array_diff($blanks, $updated)) {
+            $this->msg->write("Rebuilding with blank pages from the end.\n", self::VERBOSITY_VERBOSE);
+            $this->conf->set("blank", $updated);
+            $this->buildOutputCommands();
+        }
+
     }
 
     private function buildBlankPageCommands(&$outoutPageIndex)
