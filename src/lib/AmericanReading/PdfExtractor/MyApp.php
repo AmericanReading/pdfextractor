@@ -566,22 +566,37 @@ class MyApp extends App implements ConfigInterface
         // Read the blanks pages.
         $blanks = $this->conf->get("blank", array());
 
+        // Count the number of negative page numbers.
+        $negatives = 0;
+        foreach ($blanks as $blank) {
+            if ($blank < 0) {
+                $negatives++;
+            }
+        }
 
-        // Normalize the blanks.
-        // This can't be done until after the first pass because the total number of pages is undefined until now.
-        $updated = array_map(function ($page) use ($outoutPageIndex) {
-                if ($page < 0) {
-                    return $outoutPageIndex + $page;
-                }
-                return $page;
-            }, $blanks);
-        $updated = array_unique($updated);
+        if ($negatives > 0) {
 
-        // Update the configuration and rerun, only if the configuration is different (there were pages from the end.)
-        if (count($blanks) !== count($updated) || array_diff($blanks, $updated)) {
-            $this->msg->write("Rebuilding with blank pages from the end.\n", self::VERBOSITY_VERBOSE);
-            $this->conf->set("blank", $updated);
-            $this->buildOutputCommands();
+            // Account for the inserted blank pages in the total page count.
+            // Positive pages are allready accounted for, so we only need to add the negatives.
+            $totalPages = $outoutPageIndex + $negatives;
+
+            // Normalize the blanks.
+            // This can't be done until after the first pass because the total number of pages is undefined until now.
+            $updated = array_map(function ($page) use ($totalPages) {
+                    if ($page < 0) {
+                        return $totalPages + $page;
+                    }
+                    return $page;
+                }, $blanks);
+            $updated = array_unique($updated);
+
+            // Update the configuration and rerun, only if the configuration is different (there were pages from the end.)
+            if (count($blanks) !== count($updated) || array_diff($blanks, $updated)) {
+                $this->msg->write("Rebuilding with blank pages from the end.\n", self::VERBOSITY_VERBOSE);
+                $this->conf->set("blank", $updated);
+                $this->buildOutputCommands();
+            }
+
         }
 
     }
