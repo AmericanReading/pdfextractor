@@ -1,5 +1,5 @@
 # IDE files
-.idea/workspace.xml
+.idea
 
 # Composer
 src/vendor
