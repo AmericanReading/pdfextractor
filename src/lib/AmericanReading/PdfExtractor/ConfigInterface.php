@@ -5,8 +5,8 @@ namespace AmericanReading\PdfExtractor;
 interface ConfigInterface
 {
     const NAME = 'PDF Extractor';
-    const COPYRIGHT = 'Copyright © 2014 by American Reading Company';
-    const VERSION = '0.5.1';
+    const COPYRIGHT = 'Copyright © 2016 by American Reading Company';
+    const VERSION = '0.5.2';
     const PHAR_NAME = 'pdfextractor.phar';
     const CONFIGURATION_FILE_NAME = 'pdfextractor.json';
     const GITHUB_REPOSITORY_OWNER = 'AmericanReading';
