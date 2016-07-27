@@ -4,19 +4,19 @@ PDF Extractor is a CLI utility for converting a PDF to individual JPEG images.
 
 ## Docker
 
-The Docker image `americanreadingy/pdfextractor` provides the PDF Extractor app with all dependencies. You can use this image without installing PHP or ImageMagick.
+The Docker image `americanreadingy/pdfextractor` provides the PDF Extractor app with all dependencies. You can use this image without installing PHP or ImageMagick locally.
 
-### Obtinaing the Image
+### Obtaining the Image
 
 To build the Docker image, run:
 
-```
+```bash
 docker build -t americanreading/pdfextractor .
 ```
 
 To pull the image from Docker Hub, run:
 
-```
+```bash
 docker pull americanreading/pdfextractor
 ```
 
@@ -47,4 +47,25 @@ docker run --rm -it --name pdfextractor \
     americanreading/pdfextractor \  
         -i my-cat.pdf \
         -o my-cat-converted
+```
+
+### Development
+
+** Build a utility image **
+(this does not need to be published to Docker Hub)
+
+```
+docker build -t util -f docker/php.Dockerfile .
+```
+
+** Install Composer dependencies **
+
+```
+docker run --rm -it -v $(pwd):/app -w /app/src util composer install
+```
+
+** Build the Phar **
+
+```
+docker run --rm -it -v $(pwd):/app -w /app util php build.php
 ```
