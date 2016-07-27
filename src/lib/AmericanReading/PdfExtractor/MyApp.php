@@ -99,6 +99,7 @@ class MyApp extends App implements ConfigInterface
                 $_SERVER['HOMEPATH'],
                 '.' . self::CONFIGURATION_FILE_NAME);
         } else {
+            $configurations[] = '/etc/pdfextractor.json';
             $configurations[] = Util::joinPaths(
                 $_SERVER['HOME'],
                 '.' . self::CONFIGURATION_FILE_NAME);
